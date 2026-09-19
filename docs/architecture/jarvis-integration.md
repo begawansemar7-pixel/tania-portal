@@ -2,7 +2,7 @@
 
 | Item | Keterangan |
 |---|---|
-| Versi dokumen | 1.0 |
+| Versi dokumen | **1.1** |
 | Tanggal | 19 September 2026 |
 | Status | **Terimplementasi** — 345 test hijau (46 di antaranya untuk batas JARVIS), diverifikasi end-to-end terhadap runtime tiruan melalui HTTP |
 | Lingkup | `JarvisRuntime`, `JarvisRuntimeAdapter`, 10 adapter kapabilitas, resiliensi, dan jalur Intent → Plan → Runtime → Verification |
@@ -64,6 +64,43 @@ flowchart TB
 | `JarvisClient` | Pemanggil yang butuh kapabilitas di luar tool | Metode bertipe per kapabilitas |
 
 Keduanya berakhir sebagai `JarvisCommand` pada `JarvisRuntimeAdapter`. Itulah sebabnya timeout, retry, pembatalan, dan penolakan berlaku seragam — tidak ada jalan pintas ke runtime.
+
+---
+
+## 2b. Satu Pintu, Ditegakkan
+
+Timeout, retry, pembatalan, dan penolakan L3-tanpa-approval semuanya hidup di
+`CapabilityRoutingAdapter`. Tes di `jarvis-runtime` dan `jarvis-integration`
+menahan kode **saat ini** pada keempatnya.
+
+Semuanya menguji panggilan yang **memang** melewati adapter. Modul yang
+membangun `HttpCapabilityAdapter` sendiri, atau sekadar memanggil alamat JARVIS
+yang terkonfigurasi, tidak mendapat satu pun perlindungan itu — tanpa anggaran
+waktu, tanpa kebijakan retry, tanpa abort, tanpa pemeriksaan persetujuan — dan
+tidak satu pun tes yang ada akan gagal, karena semuanya menguji jalur yang lain.
+
+`jarvis-boundary.test.ts` memeriksa hal yang tidak bisa diperiksa perilaku:
+**apakah ada pintu kedua.**
+
+| Aturan | Gagal bila |
+|---|---|
+| Transport HTTP hanya di dalam runtime | `HttpCapabilityAdapter` disebut di berkas mana pun di luar `lib/tania/runtime/` |
+| Internal runtime tidak diimpor dari luar | Impor apa pun yang cocok `runtime/(capabilities\|adapter\|commands)` — `runtime/jarvis` dan `runtime/client` adalah pintu resminya |
+| Alamat JARVIS tidak dibaca di luar runtime | `JARVIS_BASE_URL` atau `config.runtime.baseUrl` disebut di luar dua pengecualian yang dinyatakan |
+| Setiap kapabilitas tersimulasi | Salah satu dari sepuluh tidak punya adapter simulasi — kelalaian terbaca sebagai "baik-baik saja", dan itu default yang salah |
+| Simulasi tidak menyamar sebagai live | `describe()` melaporkan `live: true` untuk kapabilitas yang tidak terhubung, yang akan membuat Settings dan `/api/ready` mengumumkan runtime yang tidak ada |
+
+Dua pengecualian **dinyatakan, bukan diasumsikan**: `config/env.ts`
+mendeklarasikan setelannya — sesuatu harus melakukannya — dan halaman Settings
+menampilkan apakah runtime terkonfigurasi. Menampilkan bukan memanggil.
+
+> **Dibuktikan menyala.** Sebuah modul yang membangun `HttpCapabilityAdapter`
+> langsung ditanam sementara: empat tes gagal, masing-masing menyebut berkasnya.
+> Hijau kembali setelah dicabut.
+>
+> Pemindainya juga diuji terhadap dirinya sendiri — banyak modul menyebut JARVIS
+> di komentar, dan pemindai yang menghitung komentar akan menggagalkan berkas
+> karena mendokumentasikan dirinya.
 
 ---
 
