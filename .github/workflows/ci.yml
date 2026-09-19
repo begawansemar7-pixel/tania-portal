@@ -39,6 +39,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
+    # A real PostgreSQL, because the `embedded-postgres` the suite uses locally
+    # cannot start here: its bundled `initdb` is linked against libicuuc.so.60,
+    # which Ubuntu 24.04 runners do not ship, and it exits 127 before the first
+    # test. The suite takes whichever one it is given.
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: tania
+          POSTGRES_PASSWORD: tania
+          POSTGRES_DB: tania_e2e
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U tania -d tania_e2e"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
     steps:
       - uses: actions/checkout@v4
 
@@ -50,8 +68,9 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm --workspace @tania/api run prisma:generate
 
-      # Starts its own PostgreSQL; no service container needed.
       - run: npm run test:e2e
+        env:
+          E2E_DATABASE_URL: postgresql://tania:tania@localhost:5432/tania_e2e?schema=public
 
   audit:
     name: Dependency audit

@@ -30,9 +30,23 @@ const PORT = 54_330;
 const SERVICE_TOKEN = 'e2e-service-token';
 const DB_NAME = 'tania_e2e';
 
+/**
+ * Where the test database comes from.
+ *
+ * Locally: `embedded-postgres`, so a developer needs no Docker and no running
+ * service. In CI that is not an option — the bundled `initdb` is linked against
+ * `libicuuc.so.60`, which Ubuntu 24.04 runners do not ship, so it exits 127
+ * before the first test runs. A service container supplies one instead and sets
+ * `E2E_DATABASE_URL`.
+ *
+ * The suite itself is identical either way; only who starts the server differs.
+ */
+const EXTERNAL_DATABASE_URL = process.env.E2E_DATABASE_URL;
+
 // Set before the app module loads: `ConfigModule.forRoot()` reads `.env` at
 // import time, so a developer's local `.env` would otherwise win over these.
-process.env.DATABASE_URL = `postgresql://tania:tania@localhost:${PORT}/${DB_NAME}`;
+process.env.DATABASE_URL =
+  EXTERNAL_DATABASE_URL ?? `postgresql://tania:tania@localhost:${PORT}/${DB_NAME}`;
 process.env.AUTH_MODE = 'service';
 process.env.TANIA_SERVICE_TOKEN = SERVICE_TOKEN;
 process.env.NODE_ENV = 'test';
@@ -77,19 +91,21 @@ function authed(method: 'get' | 'post' | 'delete', path: string, actor = henri) 
 }
 
 beforeAll(async () => {
-  databaseDir = await mkdtemp(join(tmpdir(), 'tania-e2e-pg-'));
+  if (!EXTERNAL_DATABASE_URL) {
+    databaseDir = await mkdtemp(join(tmpdir(), 'tania-e2e-pg-'));
 
-  postgres = new EmbeddedPostgres({
-    databaseDir,
-    user: 'tania',
-    password: 'tania',
-    port: PORT,
-    persistent: false,
-  });
+    postgres = new EmbeddedPostgres({
+      databaseDir,
+      user: 'tania',
+      password: 'tania',
+      port: PORT,
+      persistent: false,
+    });
 
-  await postgres.initialise();
-  await postgres.start();
-  await postgres.createDatabase(DB_NAME);
+    await postgres.initialise();
+    await postgres.start();
+    await postgres.createDatabase(DB_NAME);
+  }
 
   await run(prismaBinary(), ['migrate', 'deploy'], {
     env: { ...process.env },
