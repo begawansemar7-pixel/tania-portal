@@ -2,7 +2,7 @@
 
 | Item | Keterangan |
 |---|---|
-| Versi dokumen | 1.0 |
+| Versi dokumen | **1.1** |
 | Tanggal | 19 September 2026 |
 | Status | **Terimplementasi** — 9 agen, 299 unit test hijau (38 di antaranya untuk routing dan eksekusi agen) |
 | Lingkup | Agent interface, AgentRegistry, AgentRouter, eksekusi lewat tool terkendali |
@@ -41,6 +41,44 @@ Konsekuensinya: agen yang "nakal" pun tidak bisa berbuat lebih dari yang diizink
 `agent.automation` adalah satu-satunya agen yang membawa pekerjaan `HIGH`, dan karena itu satu-satunya yang rencananya melewati gerbang persetujuan manusia — lihat [`orchestrator.md`](orchestrator.md). Tanpa agen ini, model risiko L3/L4 tidak akan pernah terpanggil di luar pengujian.
 
 Setiap agen mendeklarasikan **kapabilitas**: label, intent yang dijawab, kosakata yang merutekannya, dan tahap kapabilitas (`KNOW`, `REASON`, `CREATE`, …).
+
+---
+
+## 2b. Isolasi Agen — Ditegakkan, Bukan Diamati
+
+Tiga batas pada §1 dijaga tes perilaku di `agent-execution`: tool di luar
+allow-list ditolak, aksi L3/L4 berhenti di gerbang persetujuan, dan tiap agen
+memverifikasi jalannya sendiri.
+
+Semuanya menguji agen yang **memang** melewati `ToolInvoker`. Tidak satu pun
+akan menyadari agen baru yang cukup mengimpor composition root dan memanggil
+runtime sendiri: ia tidak pernah menyentuh invoker, jadi tidak ada allow-list,
+tidak ada policy, tidak ada gerbang persetujuan — dan seluruh suite tetap hijau,
+karena yang diujinya adalah agen-agen lain.
+
+`agent-isolation.test.ts` menutup celah itu dengan memeriksa hal yang tidak bisa
+diperiksa perilaku: **apa yang sanggup dijangkau sebuah agen.**
+
+| Aturan | Gagal bila |
+|---|---|
+| Daftar impor tertutup | Sebuah agen mengimpor apa pun di luar `@tania/types`, `@tania/core/*`, dan `../base/base-agent` |
+| Tidak menjangkau runtime | Impor apa pun yang cocok `container`, `runtime/`, `jarvis`, `tools/registry`, `approvals/`, atau `node:` |
+| Roster lengkap | Salah satu dari delapan agen spesialis tidak terdaftar |
+| Setiap agen terdaftar punya berkas | Jumlah implementasi tidak sama dengan jumlah yang teregistrasi |
+
+Agen yang tidak mengimpor apa pun selain kontraknya **tidak dapat** melewati
+Governance Plane, apa pun isi `execute`-nya. Itu properti struktural, bukan
+disiplin penulis.
+
+> **Dibuktikan menyala.** Sebuah agen "nakal" yang mengimpor
+> `@/lib/tania/container` ditanam sementara: tiga tes gagal, masing-masing
+> menyebut berkas dan alasannya — *"the composition root would hand it the live
+> runtime"*. Hijau kembali setelah dicabut.
+>
+> Pemindainya juga diuji terhadap dirinya sendiri: `automation-agent`
+> menjelaskan JARVIS dalam prosa, dan sebuah pemindai yang menghitung komentar
+> akan menggagalkan berkas karena mendokumentasikan dirinya. Satu tes menahan
+> perbedaan itu.
 
 ---
 
