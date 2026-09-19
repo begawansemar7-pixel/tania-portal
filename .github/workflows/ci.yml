@@ -1,0 +1,129 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+concurrency:
+  # A superseded run tells you nothing; cancel it and keep the queue short.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NEXT_TELEMETRY_DISABLED: '1'
+
+jobs:
+  verify:
+    name: Lint, typecheck, unit tests, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # `--ignore-scripts` keeps a compromised dependency from running code at
+      # install time; Prisma's generate is invoked explicitly below.
+      - run: npm ci --ignore-scripts
+      - run: npm --workspace @tania/api run prisma:generate
+
+      - run: npm run verify
+
+  e2e:
+    name: Backend end-to-end
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci --ignore-scripts
+      - run: npm --workspace @tania/api run prisma:generate
+
+      # Starts its own PostgreSQL; no service container needed.
+      - run: npm run test:e2e
+
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci --ignore-scripts
+
+      # Fails the build on a high or critical advisory. Moderate findings are
+      # reported without blocking: a transitive moderate in a dev-only tool
+      # should not stop a security fix from shipping.
+      - run: npm audit --audit-level=high
+
+  smoke:
+    name: Smoke test the built portal
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [verify]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci --ignore-scripts
+      - run: npm --workspace @tania/api run prisma:generate
+
+      # The production artefact, not a dev server: this job exists to catch what
+      # only appears once the app is built and listening on a socket. A guard
+      # that rejected every real user behind an ingress passed lint, typecheck,
+      # six hundred unit tests and a code review — and failed the first HTTP
+      # call against a running build.
+      - run: npm run build
+
+      - run: npm run test:smoke
+
+  docker:
+    name: Container images
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: [verify]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Built but not pushed: publishing is a deployment decision, and this
+      # workflow only proves the images assemble.
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: web
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: api
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

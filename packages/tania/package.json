@@ -1,0 +1,85 @@
+{
+  "name": "@tania/core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TANIA domain ports: interfaces and service boundaries for identity, intent, context, reasoning, planning, memory, knowledge, orchestration, governance, and verification.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./identity": {
+      "types": "./dist/identity/index.d.ts",
+      "import": "./dist/identity/index.js"
+    },
+    "./intent": {
+      "types": "./dist/intent/index.d.ts",
+      "import": "./dist/intent/index.js"
+    },
+    "./context": {
+      "types": "./dist/context/index.d.ts",
+      "import": "./dist/context/index.js"
+    },
+    "./reasoning": {
+      "types": "./dist/reasoning/index.d.ts",
+      "import": "./dist/reasoning/index.js"
+    },
+    "./planning": {
+      "types": "./dist/planning/index.d.ts",
+      "import": "./dist/planning/index.js"
+    },
+    "./memory": {
+      "types": "./dist/memory/index.d.ts",
+      "import": "./dist/memory/index.js"
+    },
+    "./knowledge": {
+      "types": "./dist/knowledge/index.d.ts",
+      "import": "./dist/knowledge/index.js"
+    },
+    "./orchestration": {
+      "types": "./dist/orchestration/index.d.ts",
+      "import": "./dist/orchestration/index.js"
+    },
+    "./governance": {
+      "types": "./dist/governance/index.d.ts",
+      "import": "./dist/governance/index.js"
+    },
+    "./verification": {
+      "types": "./dist/verification/index.d.ts",
+      "import": "./dist/verification/index.js"
+    },
+    "./runtime": {
+      "types": "./dist/runtime/index.d.ts",
+      "import": "./dist/runtime/index.js"
+    },
+    "./voice": {
+      "types": "./dist/voice/index.d.ts",
+      "import": "./dist/voice/index.js"
+    },
+    "./insight": {
+      "types": "./dist/insight/index.d.ts",
+      "import": "./dist/insight/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -p tsconfig.spec.json",
+    "test": "vitest run",
+    "clean": "rm -rf dist *.tsbuildinfo",
+    "lint": "oxlint $(find src -name '*.ts')"
+  },
+  "dependencies": {
+    "@tania/types": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.5",
+    "typescript": "^5.9.0",
+    "vitest": "^4.1.2"
+  }
+}

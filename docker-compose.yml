@@ -1,0 +1,77 @@
+# Local production-shaped stack.
+#
+# Not a production deployment: secrets are inline, there is no TLS, and the
+# database volume is local. It exists so the same images that would ship can be
+# run against real PostgreSQL and Redis before they are trusted anywhere.
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: tania
+      POSTGRES_PASSWORD: tania
+      POSTGRES_DB: tania
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      # Waits for the database to accept connections, not just for the process.
+      test: ['CMD-SHELL', 'pg_isready -U tania -d tania']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    # Persistence off: everything TANIA puts here is a cache or a rate-limit
+    # counter, and both are safe to lose.
+    command: ['redis-server', '--save', '', '--appendonly', 'no']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      target: api
+    environment:
+      PORT: 4000
+      DATABASE_URL: postgresql://tania:tania@postgres:5432/tania?schema=public
+      REDIS_URL: redis://redis:6379
+      AUTH_MODE: service
+      TANIA_SERVICE_TOKEN: ${TANIA_SERVICE_TOKEN:?set TANIA_SERVICE_TOKEN}
+      TANIA_ASSERTION_ISSUER: urn:tania:portal
+      CORS_ORIGINS: http://localhost:3000
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    ports: ['4000:4000']
+
+  web:
+    build:
+      context: .
+      target: web
+    environment:
+      PORT: 3000
+      TANIA_API_BASE_URL: http://api:4000
+      TANIA_SERVICE_TOKEN: ${TANIA_SERVICE_TOKEN:?set TANIA_SERVICE_TOKEN}
+      REDIS_URL: redis://redis:6379
+      TANIA_ALLOWED_ORIGINS: http://localhost:3000
+      # Identity. The image runs in production mode, where the development
+      # stand-in is refused — so without these the portal authenticates nobody
+      # and reports itself not-ready. Deliberate: a local stack that quietly
+      # grants every scope is how that setting reaches a real deployment.
+      TANIA_AUTH_MODE: ${TANIA_AUTH_MODE:-oidc}
+      TANIA_OIDC_ISSUER: ${TANIA_OIDC_ISSUER:-}
+      TANIA_OIDC_CLIENT_ID: ${TANIA_OIDC_CLIENT_ID:-}
+      TANIA_OIDC_CLIENT_SECRET: ${TANIA_OIDC_CLIENT_SECRET:-}
+      TANIA_OIDC_REDIRECT_URI: ${TANIA_OIDC_REDIRECT_URI:-http://localhost:3000/api/auth/callback}
+      TANIA_SESSION_SECRET: ${TANIA_SESSION_SECRET:-}
+    depends_on:
+      api: { condition: service_started }
+      redis: { condition: service_healthy }
+    ports: ['3000:3000']
+
+volumes:
+  postgres-data:

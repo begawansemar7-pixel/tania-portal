@@ -1,0 +1,30 @@
+{
+  "name": "@tania/types",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared wire contracts for TANIA: API envelope, error codes, health, and domain DTOs.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -p tsconfig.spec.json",
+    "test": "vitest run",
+    "clean": "rm -rf dist *.tsbuildinfo",
+    "lint": "oxlint $(find src -name '*.ts')"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.5",
+    "typescript": "^5.9.0",
+    "vitest": "^4.1.2"
+  }
+}

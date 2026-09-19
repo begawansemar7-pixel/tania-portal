@@ -1,0 +1,234 @@
+// Portal TANIA — persistence model for sessions, approvals, and audit trail.
+// See docs/ARCHITECTURE.md for how these tables back the governance guarantees.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Clearance {
+  PUBLIC
+  INTERNAL
+  CONFIDENTIAL
+  RESTRICTED
+}
+
+enum RiskLevel {
+  INFORMATIONAL
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum MessageRole {
+  USER
+  TANIA
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+enum ExecutionStatus {
+  NOT_EXECUTED
+  SUCCEEDED
+  FAILED
+}
+
+/// Projection of an identity resolved by the IdP. No credential or secret is ever stored.
+model Actor {
+  id        String    @id @default(uuid())
+  /// OIDC `sub` claim, or the mock subject in development.
+  subject   String
+  /// OIDC issuer, or "mock" when the development identity provider is used.
+  issuer    String
+  name      String
+  email     String
+  unit      String?
+  role      String?
+  clearance Clearance @default(INTERNAL)
+  scopes    String[]  @default([])
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  sessions           Session[]
+  approvalsRequested Approval[]     @relation("ApprovalRequester")
+  approvalsDecided   Approval[]     @relation("ApprovalApprover")
+  tasks              Task[]
+  memories           MemoryRecord[]
+
+  @@unique([issuer, subject])
+  @@index([email])
+}
+
+/// A conversation between an actor and TANIA.
+model Session {
+  id             String   @id @default(uuid())
+  actorId        String
+  channel        String   @default("portal")
+  title          String?
+  startedAt      DateTime @default(now())
+  lastActivityAt DateTime @default(now())
+
+  actor     Actor      @relation(fields: [actorId], references: [id], onDelete: Cascade)
+  messages  Message[]
+  approvals Approval[]
+
+  @@index([actorId, lastActivityAt])
+}
+
+/// One persisted turn element. `trace` holds safe execution status only — never chain-of-thought.
+model Message {
+  id        String      @id @default(uuid())
+  sessionId String
+  role      MessageRole
+  content   String
+  intent    String?
+  risk      RiskLevel?
+  model     String?
+  evidence  Json?
+  trace     Json?
+  tools     Json?
+  createdAt DateTime    @default(now())
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
+}
+
+/// A human approval gate for a HIGH/CRITICAL risk action.
+model Approval {
+  id               String          @id @default(uuid())
+  sessionId        String?
+  messageId        String?
+  toolId           String
+  action           String
+  risk             RiskLevel
+  reason           String
+  effect           String?
+  status           ApprovalStatus  @default(PENDING)
+  requestedById    String
+  requestedAt      DateTime        @default(now())
+  decidedById      String?
+  decidedAt        DateTime?
+  decisionNote     String?
+  executionStatus  ExecutionStatus @default(NOT_EXECUTED)
+  executionSummary String?
+  executedAt       DateTime?
+
+  session     Session? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  requestedBy Actor    @relation("ApprovalRequester", fields: [requestedById], references: [id])
+  decidedBy   Actor?   @relation("ApprovalApprover", fields: [decidedById], references: [id])
+
+  @@index([status, requestedAt])
+  @@index([sessionId])
+}
+
+/// Append-only audit trail. Each row is chained to the previous one by hash,
+/// so any retroactive edit or deletion breaks verification.
+///
+/// `actorId` and `sessionId` are deliberately plain columns, not foreign keys:
+/// a cascade or SET NULL triggered elsewhere would rewrite an audited row and
+/// invalidate every hash after it.
+model AuditEvent {
+  id         String     @id @default(uuid())
+  sequence   BigInt     @unique @default(autoincrement())
+  occurredAt DateTime   @default(now())
+  event      String
+  actorId    String?
+  sessionId  String?
+  approvalId String?
+  risk       RiskLevel?
+  payload    Json
+  prevHash   String
+  hash       String     @unique
+
+  @@index([actorId])
+  @@index([event, occurredAt])
+  @@index([sessionId])
+  @@index([approvalId])
+}
+
+enum MemoryScope {
+  SESSION
+  ACTOR
+  ORGANISATION
+}
+
+/// A long-running unit of work, stored as the report the portal renders.
+///
+/// The report is kept as JSON rather than decomposed into tables: its shape is
+/// owned by `@tania/types` and changes with the orchestrator, and a schema that
+/// mirrored it would have to migrate in lockstep for no query benefit. What is
+/// promoted to columns is exactly what is filtered on.
+model Task {
+  id          String   @id
+  actorId     String
+  status      String
+  /// Mirrors `report.plan[].approvalId`, so a decided approval can find its task.
+  approvalIds String[] @default([])
+  report      Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  actor Actor @relation(fields: [actorId], references: [id], onDelete: Cascade)
+
+  @@index([actorId, createdAt])
+  @@index([actorId, status])
+}
+
+/// What TANIA is allowed to remember, and for whom.
+///
+/// Classification travels with the record so a read can be filtered against the
+/// reader's clearance, and `expiresAt` makes retention a stored property rather
+/// than a convention nobody enforces.
+model MemoryRecord {
+  id             String      @id @default(uuid())
+  actorId        String
+  scope          MemoryScope
+  key            String
+  value          String
+  classification Clearance   @default(INTERNAL)
+  sessionId      String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  expiresAt      DateTime?
+
+  actor Actor @relation(fields: [actorId], references: [id], onDelete: Cascade)
+
+  @@index([actorId, scope, createdAt])
+  @@index([expiresAt])
+}
+
+/// The ten-field governance record for one finished task.
+///
+/// Deliberately flat and append-only. Like `AuditEvent` it keeps `actorId` as a
+/// plain column rather than a foreign key: a cascade that rewrote a governance
+/// row would destroy the thing the row exists to prove.
+model GovernanceRecord {
+  id             String    @id @default(uuid())
+  sequence       BigInt    @unique @default(autoincrement())
+  actorId        String
+  intent         String
+  agent          String
+  tool           String
+  action         String
+  result         String
+  risk           RiskLevel
+  verificationOk Boolean
+  dataAccess     Json
+  verification   Json
+  correlationId  String
+  occurredAt     DateTime  @default(now())
+
+  @@index([actorId, occurredAt])
+  @@index([correlationId])
+}

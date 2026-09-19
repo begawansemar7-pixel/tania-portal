@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+.next/
+*.tsbuildinfo
+
+# Environment — never commit real secrets
+.env
+.env.local
+.env.*.local
+
+# Local development data
+.pgdata/
+apps/api/.pgdata/
+
+# Generated code
+apps/api/src/generated/
+
+# Tooling
+.DS_Store
+coverage/
+
+# Nested repositories with their own remotes.
+#
+# Each is a git repository in its own right, so `git add` would record a bare
+# gitlink here — a submodule reference with no .gitmodules behind it, which
+# clones as an empty directory and confuses every tool that reads it. They are
+# excluded outright rather than half-included.
+#
+# AGENT-TANIA also carries CC BY-NC 4.0 from upstream Mark-LIII, which forbids
+# commercial use; vendoring it into a corporate monorepo would import that
+# restriction. It already lives at begawansemar7-pixel/AGENT-TANIA.
+AGENT-TANIA/
+
+# The Supabase talent portal, on a different account
+# (henriset2026-stack/tania-portal) and currently in detached HEAD.
+.kilo/

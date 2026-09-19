@@ -1,0 +1,33 @@
+{
+  "name": "tania",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TANIA — Telkom AI Native Intelligent Assistant / AI Employee for Digital Product & Solution",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build:packages": "npm run build --workspace @tania/types && npm run build --workspace @tania/config && npm run build --workspace @tania/core",
+    "build:apps": "npm run build --workspace @tania/api && npm run build --workspace @tania/web",
+    "build": "npm run build:packages && npm run build:apps",
+    "typecheck": "npm run build:packages && npm run typecheck --workspaces --if-present",
+    "test": "npm run build:packages && npm run test --workspaces --if-present",
+    "test:e2e": "npm run test:e2e --workspace @tania/api",
+    "test:smoke": "node scripts/smoke.mjs",
+    "lint": "npm run lint --workspaces --if-present",
+    "verify": "npm run typecheck && npm run lint && npm run test && npm run build",
+    "dev:web": "npm run dev --workspace @tania/web",
+    "dev:api": "npm run start:dev --workspace @tania/api",
+    "dev:db": "npm run db:embedded --workspace @tania/api",
+    "db:deploy": "npm run db:deploy --workspace @tania/api",
+    "clean": "rm -rf packages/*/dist apps/api/dist apps/web/.next"
+  },
+  "devDependencies": {
+    "oxlint": "^1.58.0",
+    "typescript": "^5.9.0"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  }
+}
