@@ -2,7 +2,7 @@
 
 | Item | Keterangan |
 |---|---|
-| Versi dokumen | 1.0 |
+| Versi dokumen | **1.1** |
 | Tanggal | 19 September 2026 |
 | Status | **Terimplementasi** — 379 test hijau (34 di antaranya untuk suara), diverifikasi di peramban sungguhan |
 | Lingkup | `TaniaVoiceController`, `VoiceStateMachine`, `SpeechInputAdapter`, `SpeechOutputAdapter`, seam avatar |
@@ -25,6 +25,41 @@ Mikrofon
 ```
 
 Yang penting: **giliran suara adalah giliran biasa.** Ia melewati `send()` yang sama dengan ketikan, sehingga percakapan, panel aktivitas, dan panel hasil ikut terbarui seperti biasa. Suara mengubah cara pertanyaan tiba, bukan apa yang TANIA lakukan dengannya — termasuk tata kelola: aksi L3/L4 tetap menunggu persetujuan manusia meski dimulai dengan berbicara.
+
+---
+
+## 1b. Ketika Runtime Tidak Punya Perangkat Audio
+
+`apps/runtime` menjawab `voice.input` dan `voice.output` dengan **`UNSUPPORTED`**:
+sebuah layanan tidak punya mikrofon maupun pengeras suara. Itu bukan kasus tepi —
+itu **perilaku bawaan** setiap penyebaran sisi-server, dan itulah yang ditemui
+pengguna pada tekanan pertama tombol mikrofon begitu `JARVIS_BASE_URL` diarahkan
+ke sana.
+
+Yang menentukan bukan apakah suara tersedia, melainkan **bagaimana
+ketiadaannya disampaikan**:
+
+| Jawaban | Akibat pada pengguna |
+|---|---|
+| `UNSUPPORTED` → **501 NOT_IMPLEMENTED** | "Suara tidak tersedia di sini." Pengguna berhenti mencoba |
+| `FAILED` / 503 | "Coba lagi nanti." Pengguna mencoba selamanya; runtime tidak akan pernah tumbuh mikrofon |
+
+Rute `transcribe` dan `speak` memetakan `UNSUPPORTED` ke `NOT_IMPLEMENTED` dan
+**meneruskan alasan runtime apa adanya**, bukan pesan pengganti yang umum.
+
+Dua hal dijaga tes:
+
+1. **Batas HTTP** (`tests/routes/voice-route.test.ts`) — 501 dengan kode dan
+   pesan runtime, dibedakan dari kegagalan upstream.
+2. **Soket sungguhan** (`tests/runtime-interop.interop.ts`) — adapter TANIA
+   terhadap runtime yang benar-benar berjalan: `UNSUPPORTED`,
+   `retryable: false`, dan **satu percobaan saja**. Sebuah jawaban
+   `FAILED`+retryable akan membuat `CapabilityRoutingAdapter` menghabiskan
+   seluruh jatah percobaan sebelum menyerah — mengubah "tidak ada di sini"
+   yang seketika dan pasti menjadi yang lambat.
+
+Penyedia peramban tetap menjadi jalur suara yang berfungsi hari ini; runtime
+adalah jalur yang jujur menyatakan dirinya tidak bisa.
 
 ---
 

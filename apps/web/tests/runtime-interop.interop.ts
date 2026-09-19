@@ -165,6 +165,44 @@ describe('TANIA adapter against the real runtime', () => {
     expect((await pending).status).toBe('CANCELLED');
   });
 
+  describe('voice against a runtime with no audio hardware', () => {
+    /**
+     * The default for any server-side deployment, not an edge case.
+     *
+     * `apps/runtime` refuses voice by design — a service has no microphone and
+     * no speaker — so this is what a user hits on the first press of the mic
+     * button once JARVIS_BASE_URL points at it. The answer has to be
+     * distinguishable from an outage, or the voice layer will invite retries
+     * that can never succeed.
+     */
+    it.each(['voice.input', 'voice.output'] as const)(
+      'refuses %s with a reason rather than failing',
+      async (capability) => {
+        const result = await runtime().adapter.dispatch(
+          command({ capability, action: `${capability.replace('.', '.')}.do` }),
+        );
+
+        expect(result.status).toBe('UNSUPPORTED');
+        expect(result.error?.code).toBe('CAPABILITY_UNSUPPORTED');
+        // Not retryable: no amount of trying gives a server a microphone.
+        expect(result.error?.retryable).toBe(false);
+        expect(result.error?.message.length).toBeGreaterThan(0);
+      },
+    );
+
+    it('does not report voice as a failure the router would retry', async () => {
+      // A FAILED+retryable answer here would have CapabilityRoutingAdapter
+      // spend every attempt before giving up, turning an immediate, knowable
+      // "not here" into a slow one.
+      const result = await runtime().adapter.dispatch(
+        command({ capability: 'voice.input', action: 'voice.transcribe' }),
+      );
+
+      expect(result.status).not.toBe('FAILED');
+      expect(result.attempts ?? 1).toBe(1);
+    });
+  });
+
   it('reports the runtime as live once it is actually answering', async () => {
     const statuses = runtime().describe();
 
