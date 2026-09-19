@@ -2,7 +2,7 @@
 
 | Item | Keterangan |
 |---|---|
-| Versi dokumen | 1.0 |
+| Versi dokumen | **1.1** |
 | Tanggal | 19 September 2026 |
 | Status | **Terimplementasi** — 299 test hijau (44 di antaranya untuk siklus hidup tugas dan pemulihan kegagalan), diverifikasi end-to-end di atas PostgreSQL |
 | Lingkup | `Orchestrator`, `Planner`, `AgentRouter`, `ToolRouter`, `ExecutionManager`, `VerificationManager`, `ApprovalManager` |
@@ -36,6 +36,25 @@ Tabel transisi ada di `packages/tania/src/orchestration/index.ts` (`TASK_TRANSIT
 2. **Status terminal benar-benar akhir.** `COMPLETED`, `FAILED`, `BLOCKED`, dan `CANCELLED` tidak punya transisi keluar.
 
 Setiap perpindahan melewati `canTransition()`. Perpindahan yang tidak ada di tabel melempar `TaniaError.internal` — lebih baik berisik daripada meninggalkan tugas dalam keadaan mustahil.
+
+Dua invarian lagi dijaga sebagai **sifat tabel**, bukan sebagai daftar
+perpindahan yang diperiksa satu per satu:
+
+3. **Setiap status dapat dicapai dari `REQUESTED`.** Sisi keluar tabel sudah
+   diuji rapat; sisi masuknya tidak. Status yang ditambahkan ke `TASK_STATES`
+   dan diberi daftar transisi, tetapi tidak pernah dituju apa pun, lolos setiap
+   tes lain sambil menjadi kode mati — tampak bagian dari siklus hidup, padahal
+   tidak akan pernah terjadi.
+4. **Tidak ada status non-terminal yang buntu.** Setiap status harus dapat
+   mencapai akhir; satu yang tidak akan memarkir tugas selamanya tanpa jalan
+   untuk melaporkan atau menutupnya.
+
+> **Dibuktikan menyala.** Sebuah status `ORPHANED` ditanam sementara —
+> dideklarasikan dengan benar di `TASK_STATES` *dan* `TASK_TRANSITIONS`,
+> sehingga hanya keterjangkauan yang dapat menangkapnya. Tepat satu tes gagal,
+> yang baru itu. Percobaan pertama keliru: status hanya ditanam di tabel
+> transisi, dan yang menangkapnya justru tes kelengkapan yang lama — bukti
+> bahwa eksperimennya yang salah, bukan tesnya.
 
 > **Catatan urutan.** Spesifikasi awal menulis `… → COMPLETED/FAILED/BLOCKED/CANCELLED → REPORTING → REMEMBERING`. Implementasi **menentukan** hasil akhir pada titik yang sama (segera setelah eksekusi atau keputusan manusia selesai) tetapi **menerapkannya** paling akhir, sesudah laporan tersusun dan memori ditulis. Alasannya satu: sebuah tugas tidak boleh berstatus `COMPLETED` sebelum hasilnya benar-benar ada. Dengan begitu `COMPLETED` tetap berarti "selesai dan dapat dibaca", bukan "sedang menyusun laporan".
 

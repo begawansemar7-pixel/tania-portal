@@ -69,6 +69,56 @@ describe('task state machine', () => {
     expect(canTransition('CANCELLED', 'REPORTING')).toBe(false);
   });
 
+  /**
+   * Outgoing edges are covered above; incoming ones are not.
+   *
+   * A state added to `TASK_STATES` and given a transition list, but that
+   * nothing ever moves *into*, passes every other test here while being dead:
+   * it looks like part of the lifecycle and can never occur. The walk starts
+   * where a task starts, so it can only reach what a real task can.
+   */
+  it('reaches every declared state from REQUESTED', () => {
+    const seen = new Set<TaskState>(['REQUESTED']);
+    const queue: TaskState[] = ['REQUESTED'];
+
+    while (queue.length > 0) {
+      for (const next of TASK_TRANSITIONS[queue.shift() as TaskState]) {
+        if (seen.has(next)) continue;
+        seen.add(next);
+        queue.push(next);
+      }
+    }
+
+    const unreachable = TASK_STATES.filter((state) => !seen.has(state));
+    expect(unreachable).toEqual([]);
+  });
+
+  it('leaves no state stranded short of an ending', () => {
+    // Every non-terminal state must be able to finish. One that cannot would
+    // park a task forever with no way to report or close it.
+    for (const state of TASK_STATES) {
+      if (isTerminalTaskState(state)) continue;
+
+      const seen = new Set<TaskState>([state]);
+      const queue: TaskState[] = [state];
+      let ends = false;
+
+      while (queue.length > 0 && !ends) {
+        for (const next of TASK_TRANSITIONS[queue.shift() as TaskState]) {
+          if (isTerminalTaskState(next)) {
+            ends = true;
+            break;
+          }
+          if (seen.has(next)) continue;
+          seen.add(next);
+          queue.push(next);
+        }
+      }
+
+      expect(ends, `${state} can never reach an ending`).toBe(true);
+    }
+  });
+
   it('allows a gate to be entered again for a second decision', () => {
     expect(canTransition('APPROVAL', 'APPROVAL')).toBe(true);
     expect(canTransition('EXECUTING', 'APPROVAL')).toBe(true);
