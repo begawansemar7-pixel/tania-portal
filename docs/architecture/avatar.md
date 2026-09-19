@@ -2,7 +2,7 @@
 
 | Item | Keterangan |
 |---|---|
-| Versi dokumen | 1.0 |
+| Versi dokumen | **1.1** |
 | Tanggal | 19 September 2026 |
 | Status | **Terimplementasi** — 502 test hijau (88 di antaranya untuk avatar), gerakan dan tatapan diukur dari piksel di peramban |
 | Lingkup | `components/tania/*`, `lib/avatar/*`, `TaniaCommand`, lip sync, gerak hidup, dan fallback |
@@ -47,6 +47,38 @@ Hanya `state` yang wajib. Bidang yang dihilangkan **mempertahankan pose yang sud
 Dua pilihan yang disengaja: `IDLE` dan `LISTENING` **tanpa gestur**, karena avatar yang terus bergerak saat orang berbicara terbaca tidak sabar, bukan penuh perhatian. Dan `THINKING` memandang **menjauh** — justru itulah yang membuat "sedang berpikir" terbaca dari luar.
 
 ---
+
+## 2b. Mengapa Expression, Gesture, Gaze, dan LipSync Bukan Komponen
+
+Brief arsitektur menyebut delapan item di bawah `components/tania/`. Empat ada
+sebagai komponen; empat lainnya — expression, gesture, gaze, lip sync — adalah
+**kelas pengendali** di `lib/avatar/`, dikomposisikan oleh `TaniaAnimator` di
+dalam **satu** `useFrame`.
+
+Itu keputusan, bukan kelalaian:
+
+| Bila dipecah menjadi empat komponen | Akibat |
+|---|---|
+| Empat `useFrame` terpisah | Urutan tulis bergantung pada urutan anak React, bukan urutan yang dinyatakan |
+| Dua penulis pada satu channel | Ekspresi dan lip sync sama-sama menyentuh wajah; hari ini masing-masing memiliki channel sendiri — alis dan kelopak vs mulut — sehingga tidak ada yang menimpa yang lain |
+| Komponen yang merender `null` | Ada hanya demi efek samping, pola yang justru dihindari React |
+| Biaya per frame berlipat | Satu loop menjadi empat, untuk animasi yang berjalan 60 kali per detik |
+
+Pengendali berupa kelas biasa karena **React tidak perlu me-render rahang**.
+Peristiwa bus ditulis ke ref dan dikonsumsi `useFrame`, sehingga mulut yang
+bergerak lima kali sedetik tidak berbiaya apa pun di atas kanvas.
+
+> **Kini ditegakkan.** Sifat itu sebelumnya hanya dijaga sebuah komentar.
+> `avatar-invariants.test.ts` menggagalkan build bila ada `useFrame` kedua di
+> mana pun di aplikasi, bila animator memanggilnya lebih dari sekali, atau bila
+> `useState` masuk ke jalur animasi. Dibuktikan menyala dengan menanam komponen
+> penulis kedua: tesnya gagal sambil menyebut berkasnya.
+
+Bila bentuk deklaratif tetap diinginkan — `<TaniaExpression value={…} />` di
+dalam `<TaniaScene>` — pembungkus tipis di atas pengendali yang sama bisa
+ditambahkan tanpa memecah loop. Itu perubahan permukaan, bukan perubahan
+arsitektur.
+
 
 ## 3. Komponen
 

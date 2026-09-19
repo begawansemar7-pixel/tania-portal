@@ -16,7 +16,12 @@ function voice(state: VoiceSnapshot['state'], overrides: Partial<VoiceSnapshot> 
 
 describe('PromptComposer', () => {
   it('sends on Enter and clears the field', async () => {
-    const user = userEvent.setup();
+    // `delay: null`: userEvent otherwise yields to the event loop between
+    // keystrokes to mimic human cadence. Under CPU contention each yield can
+    // stretch, and a multi-word `type()` then exceeds the 5s timeout — which
+    // is how these tests failed once during a parallel build and passed on
+    // every rerun. Nothing here asserts typing speed.
+    const user = userEvent.setup({ delay: null });
     const onSubmit = vi.fn();
     render(<PromptComposer onSubmit={onSubmit} busy={false} />);
 
@@ -28,7 +33,7 @@ describe('PromptComposer', () => {
   });
 
   it('adds a line on Shift+Enter instead of sending', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     const onSubmit = vi.fn();
     render(<PromptComposer onSubmit={onSubmit} busy={false} />);
 
@@ -40,7 +45,7 @@ describe('PromptComposer', () => {
   });
 
   it('refuses to send whitespace', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     const onSubmit = vi.fn();
     render(<PromptComposer onSubmit={onSubmit} busy={false} />);
 
@@ -57,7 +62,7 @@ describe('PromptComposer', () => {
   });
 
   it('counts down the characters left', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     render(<PromptComposer onSubmit={vi.fn()} busy={false} />);
 
     await user.type(screen.getByLabelText('Pesan untuk TANIA'), 'halo');
@@ -81,7 +86,7 @@ describe('PromptComposer', () => {
 
 describe('the microphone control', () => {
   it('starts a spoken turn when idle', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     const controls = voice('IDLE');
     render(<PromptComposer onSubmit={vi.fn()} busy={false} voice={controls} />);
 
@@ -92,7 +97,7 @@ describe('the microphone control', () => {
   });
 
   it('becomes a stop button while anything is happening', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
 
     for (const state of ['LISTENING', 'PROCESSING', 'SPEAKING'] as const) {
       const controls = voice(state);

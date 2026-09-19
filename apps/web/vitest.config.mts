@@ -21,6 +21,18 @@ export default defineConfig({
     environment: 'node',
     include: ['tests/**/*.test.ts', 'tests/**/*.test.tsx'],
     setupFiles: ['tests/setup.ts'],
+    /**
+     * Component tests render a React tree and drive it through simulated
+     * streaming. Comfortably under a second each when the machine is idle, and
+     * past the 5s default when a build is running beside them — observed here
+     * as three tests timing out at 6s, 10s and 12s during a parallel build,
+     * then passing on every isolated rerun.
+     *
+     * Raised rather than papered over: the limit exists to catch a test that
+     * hangs, not to assert how fast a loaded CI runner is. A genuine hang still
+     * fails, fifteen seconds later.
+     */
+    testTimeout: 15_000,
     coverage: {
       provider: 'v8',
       reporter: ['text-summary', 'html'],

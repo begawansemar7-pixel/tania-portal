@@ -78,7 +78,12 @@ describe('TaskTrays', () => {
   });
 
   it('keeps the execution trace collapsed until asked for', async () => {
-    const user = userEvent.setup();
+    // `delay: null`: userEvent otherwise yields to the event loop between
+    // keystrokes to mimic human cadence. Under CPU contention each yield can
+    // stretch, and a multi-word `type()` then exceeds the 5s timeout — which
+    // is how these tests failed once during a parallel build and passed on
+    // every rerun. Nothing here asserts typing speed.
+    const user = userEvent.setup({ delay: null });
     render(<TaskTrays tasks={[task()]} />);
 
     expect(screen.queryByText('Jejak eksekusi')).not.toBeInTheDocument();
@@ -94,7 +99,7 @@ describe('TaskTrays', () => {
   });
 
   it('shows an artifact with its provenance and whether it was verified', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     render(
       <TaskTrays
         tasks={[
@@ -124,7 +129,7 @@ describe('TaskTrays', () => {
   });
 
   it('surfaces what went wrong on a failed task', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     render(
       <TaskTrays
         tasks={[

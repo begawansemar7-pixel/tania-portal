@@ -36,7 +36,12 @@ describe('sidebar drawer', () => {
   });
 
   it('closes on Escape', async () => {
-    const user = userEvent.setup();
+    // `delay: null`: userEvent otherwise yields to the event loop between
+    // keystrokes to mimic human cadence. Under CPU contention each yield can
+    // stretch, and a multi-word `type()` then exceeds the 5s timeout — which
+    // is how these tests failed once during a parallel build and passed on
+    // every rerun. Nothing here asserts typing speed.
+    const user = userEvent.setup({ delay: null });
     const { onClose } = renderDrawer(true);
 
     await user.keyboard('{Escape}');
@@ -45,7 +50,7 @@ describe('sidebar drawer', () => {
   });
 
   it('keeps Tab inside the dialog', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     renderDrawer(true);
 
     const focusable = [
@@ -62,7 +67,7 @@ describe('sidebar drawer', () => {
   });
 
   it('wraps backwards from the first control to the last', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     renderDrawer(true);
 
     await user.tab({ shift: true });

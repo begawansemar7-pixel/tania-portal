@@ -83,7 +83,12 @@ beforeEach(() => {
 
 describe('sending a message', () => {
   it('shows the question, streams the answer, then settles', async () => {
-    const user = userEvent.setup();
+    // `delay: null`: userEvent otherwise yields to the event loop between
+    // keystrokes to mimic human cadence. Under CPU contention each yield can
+    // stretch, and a multi-word `type()` then exceeds the 5s timeout — which
+    // is how these tests failed once during a parallel build and passed on
+    // every rerun. Nothing here asserts typing speed.
+    const user = userEvent.setup({ delay: null });
 
     streamChat.mockImplementation(async (_request: unknown, handlers: Record<string, never>) => {
       const hooks = handlers as unknown as {
@@ -107,7 +112,7 @@ describe('sending a message', () => {
   });
 
   it('carries the conversation into the next turn', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     streamChat.mockImplementation(async () => reply());
 
     render(<Workspace />);
@@ -124,7 +129,7 @@ describe('sending a message', () => {
   });
 
   it('sends the surface it was asked from, so the answer has context', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     streamChat.mockImplementation(async () => reply());
 
     render(<Workspace />);
@@ -138,7 +143,7 @@ describe('sending a message', () => {
   });
 
   it('refuses to send a second message while one is in flight', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     let release: (value: TaniaChatResponse) => void = () => {};
     streamChat.mockImplementation(() => new Promise((resolve) => (release = resolve)));
 
@@ -156,7 +161,7 @@ describe('sending a message', () => {
 
 describe('when a turn fails', () => {
   it('drops the half-streamed answer instead of leaving it looking complete', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
 
     streamChat.mockImplementation(async (_request: unknown, handlers: Record<string, never>) => {
       (handlers as unknown as { onDelta?: (t: string) => void }).onDelta?.('Kinerja produk X');
@@ -172,7 +177,7 @@ describe('when a turn fails', () => {
   });
 
   it('surfaces the failure and offers to try again', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     streamChat.mockImplementation(async () => {
       throw new Error('koneksi terputus');
     });
@@ -184,7 +189,7 @@ describe('when a turn fails', () => {
   });
 
   it('retries exactly what was asked', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     streamChat.mockImplementationOnce(async () => {
       throw new Error('gagal');
     });
@@ -200,7 +205,7 @@ describe('when a turn fails', () => {
   });
 
   it('leaves the field usable after a failure', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     streamChat.mockImplementation(async () => {
       throw new Error('gagal');
     });
@@ -215,7 +220,7 @@ describe('when a turn fails', () => {
 
 describe('starting over', () => {
   it('clears the thread and asks for a new conversation', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     streamChat.mockImplementation(async () => reply());
 
     render(<Workspace />);
@@ -229,7 +234,7 @@ describe('starting over', () => {
   });
 
   it('still clears the thread when the backend cannot mint an id', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     streamChat.mockImplementation(async () => reply());
     newConversation.mockRejectedValueOnce(new Error('backend mati'));
 
@@ -253,7 +258,7 @@ describe('an empty workspace', () => {
   });
 
   it('offers quick actions that send a real question', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     streamChat.mockImplementation(async () => reply());
 
     render(<Workspace />);
@@ -285,7 +290,7 @@ describe('an answer that needs a human decision', () => {
   }
 
   it('shows the gate with its risk instead of quietly running', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     streamChat.mockImplementation(async () => gated());
 
     render(<Workspace />);
@@ -297,7 +302,7 @@ describe('an answer that needs a human decision', () => {
   });
 
   it('records the decision and stops offering the buttons', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     streamChat.mockImplementation(async () => gated());
 
     const fetchMock = vi.fn(async () =>
@@ -343,7 +348,7 @@ describe('an answer that needs a human decision', () => {
   });
 
   it('keeps the gate open when the decision cannot be saved', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     streamChat.mockImplementation(async () => gated());
 
     vi.stubGlobal(
