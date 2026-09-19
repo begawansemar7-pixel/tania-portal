@@ -2,9 +2,9 @@
 
 | Item | Keterangan |
 |---|---|
-| Versi dokumen | 1.0 |
+| Versi dokumen | **1.1** |
 | Tanggal | 19 September 2026 |
-| Status | **Terimplementasi** — 124 unit test hijau, termasuk 26 kasus evaluasi RAG |
+| Status | **Terimplementasi** — evaluasi RAG, kontrak retrieval, batas HTTP, dan sitasi di UI semuanya tertutup tes |
 | Lingkup | Ingestion, indexing, retrieval, reranking, citations, permissions |
 | Dasar | Prinsip P3 dan P6 pada [`tania-target-architecture.md`](tania-target-architecture.md) |
 
@@ -167,6 +167,68 @@ Dipakai oleh:
 | Citation correctness | Sitasi hanya menunjuk materi yang diambil, lokator dan klasifikasinya cocok dengan dokumen asli, penanda berurutan | 4 |
 | Hallucination resistance | Tanpa rujukan → menolak menjawab; setiap angka pada jawaban harus ada pada kutipan | 3 |
 | Batas yang diketahui | Perilaku lemah yang sengaja dikunci (lihat §9) | 2 |
+
+---
+
+## 8b. Penyaringan per Jenis Dokumen
+
+Sembilan jenis dideklarasikan di `DOCUMENT_KINDS`, dan ketersembilannya hadir di
+korpus benih — dijaga sebuah tes, karena jenis yang dideklarasikan tetapi tidak
+pernah ada di korpus tidak diuji oleh suite mana pun: tidak ada yang
+mengambilnya, jadi tidak ada yang memeriksa izin atau sitasinya.
+
+| Jenis | Contoh di korpus |
+|---|---|
+| `PRD` · `BRD` · `PROPOSAL` · `BUSINESS_CASE` | Dokumen produk dan komersial |
+| `ARCHITECTURE` · `SOP` | Keputusan teknis dan prosedur |
+| `REPORT` · `MEETING_MINUTES` · `PRODUCT_DOC` | Laporan, notulen, katalog produk |
+
+Pemanggil dapat mempersempit pencarian: `kinds: ['SOP']` pada `RetrievalQuery`
+atau pada `POST /api/tania/knowledge/search`.
+
+> **Cacat yang ditemukan saat menulis tesnya.** `RetrievalRequest` — kontrak
+> yang diterima *Retriever* — sudah membawa `kinds` sejak awal, dan
+> `HybridRetriever` menerapkannya dengan benar. Tetapi `RetrievalQuery` —
+> kontrak yang diterima *RagService*, yang dilalui **setiap** pemanggil — tidak
+> memilikinya. Filternya terimplementasi, teruji satu lapis di bawah, dan tidak
+> dapat dijangkau dari mana pun di aplikasi.
+>
+> Kelas cacat yang sama dengan `sweep()` pada pembatas laju: ditulis, benar, dan
+> tidak pernah tersambung. Kini diteruskan, dan lima tes gagal bila
+> penerusannya dicabut.
+
+Jenis yang tidak dikenal **ditolak**, bukan diabaikan: menjatuhkannya diam-diam
+akan melebarkan pencarian kembali ke seluruh korpus — kebalikan dari yang
+diminta pemanggil.
+
+---
+
+## 8c. Sitasi di Antarmuka
+
+`EvidenceList` merender setiap sitasi dengan penanda, judul, *locator*
+(bagian dan halaman), klasifikasi, dan sumbernya — cukup bagi pembaca untuk
+membuka dokumennya dan memeriksa kalimatnya sendiri.
+
+Dua sifat dijaga tes, karena keduanya diam-diam merusak kepercayaan bila salah:
+
+1. **Penanda tetap bersama dokumennya.** Jawaban yang merujuk `[2]` sementara
+   daftar menampilkan dokumen lain di posisi itu terlihat terverifikasi padahal
+   tidak — lebih buruk daripada jawaban tanpa sitasi.
+2. **Ketiadaan sitasi dinyatakan.** Jawaban tanpa rujukan menampilkan pesan
+   eksplisit, bukan daftar kosong yang mudah terbaca sebagai "sudah diperiksa".
+
+---
+
+## 8d. Batas HTTP
+
+`POST /api/tania/knowledge/search` mengembalikan kontrak RAG apa adanya, dan
+enam belas tes menahannya di sana. Yang paling penting:
+
+| Yang dijaga | Mengapa |
+|---|---|
+| `classificationCeiling` **tidak pernah dapat melebarkan** | Nilainya datang dari badan permintaan. `visibilityFilter` memeriksa `canRead(actor, …)` lebih dulu dan tanpa syarat, lalu ceiling menjadi filter *tambahan*. Tukar urutan keduanya dan klien dapat menyebut clearance-nya sendiri |
+| `retrievedDocuments` tidak pernah memuat dokumen di atas clearance | Daftar itu berisi yang *dipertimbangkan*. Bila penyaringan terjadi setelah perangkingan, dokumen terlarang akan muncul lewat judulnya saja — pengungkapan tanpa satu pun sitasi |
+| Jenis tak dikenal ditolak | Lihat §8b |
 
 ---
 

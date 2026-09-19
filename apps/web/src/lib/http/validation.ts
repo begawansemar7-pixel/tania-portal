@@ -1,4 +1,5 @@
 import { ApiError } from './api-error';
+import { DOCUMENT_KINDS, type DocumentKind } from '@tania/core/knowledge';
 import type { AskRequest, Intent } from '@/lib/tania/types';
 import type { ChatContext, Classification, TaniaChatRequest } from '@tania/types';
 
@@ -193,6 +194,7 @@ export interface KnowledgeSearchRequest {
   query: string;
   limit: number;
   classificationCeiling?: Classification;
+  kinds?: DocumentKind[];
 }
 
 /**
@@ -228,9 +230,28 @@ export function parseKnowledgeSearchRequest(payload: unknown): KnowledgeSearchRe
     );
   }
 
+  const kinds = body.kinds;
+  if (kinds !== undefined) {
+    if (!Array.isArray(kinds) || kinds.length === 0 || kinds.length > DOCUMENT_KINDS.length) {
+      throw new ApiError('BAD_REQUEST', '`kinds` must be a non-empty array of document kinds.');
+    }
+
+    // An unknown kind is rejected rather than ignored: silently dropping it
+    // would widen the search back to the whole corpus, which is the opposite
+    // of what the caller asked for.
+    const unknown = kinds.filter((kind) => !DOCUMENT_KINDS.includes(kind as DocumentKind));
+    if (unknown.length > 0) {
+      throw new ApiError(
+        'BAD_REQUEST',
+        `\`kinds\` must be one of: ${DOCUMENT_KINDS.join(', ')}.`,
+      );
+    }
+  }
+
   return {
     query: query.trim(),
     limit: (limit as number | undefined) ?? 5,
     ...(ceiling === undefined ? {} : { classificationCeiling: ceiling as Classification }),
+    ...(kinds === undefined ? {} : { kinds: kinds as DocumentKind[] }),
   };
 }

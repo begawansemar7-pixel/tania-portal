@@ -39,6 +39,7 @@ export async function POST(request: Request): Promise<Response> {
         ...(search.classificationCeiling === undefined
           ? {}
           : { classificationCeiling: search.classificationCeiling }),
+        ...(search.kinds === undefined ? {} : { kinds: search.kinds }),
       },
       actor,
     );

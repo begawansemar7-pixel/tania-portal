@@ -64,6 +64,7 @@ export class RagService {
         ...(query.classificationCeiling === undefined
           ? {}
           : { classificationCeiling: query.classificationCeiling }),
+        ...(query.kinds === undefined ? {} : { kinds: query.kinds }),
       },
       actor,
     );

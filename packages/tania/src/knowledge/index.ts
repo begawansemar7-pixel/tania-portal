@@ -221,6 +221,15 @@ export interface RetrievalQuery {
   query: string;
   limit: number;
   classificationCeiling?: Classification;
+  /**
+   * Narrow the search to particular document kinds.
+   *
+   * `RetrievalRequest` has carried this since the retriever was written, but it
+   * was absent here — so every caller that goes through `RagService`, which is
+   * all of them, could not reach a filter that was already implemented and
+   * tested at the layer below.
+   */
+  kinds?: DocumentKind[];
 }
 
 /** Retrieval plus the grounding signals a caller needs to stay honest. */
