@@ -92,6 +92,28 @@ jobs:
       # should not stop a security fix from shipping.
       - run: npm audit --audit-level=high
 
+  interop:
+    name: Adapter against the real runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [verify]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci --ignore-scripts
+      - run: npm --workspace @tania/api run prisma:generate
+
+      # Proves the two halves of the JarvisCommand contract agree over a real
+      # socket. Both compile against @tania/types, so a failure here means the
+      # wire format drifted from the declarations.
+      - run: npm run test:interop
+
   smoke:
     name: Smoke test the built portal
     runs-on: ubuntu-latest
