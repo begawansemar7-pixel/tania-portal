@@ -2,20 +2,24 @@
 
 | Item | Keterangan |
 |---|---|
-| Tanggal | 19 September 2026 |
-| Lingkup | Portal `apps/web`, backend `apps/api`, paket bersama, dan artefak deployment |
+| Tanggal | 20 September 2026 |
+| Lingkup | Portal `apps/web`, backend `apps/api`, runtime `apps/runtime`, paket bersama, dan artefak deployment |
 | Metode | Telaah kode, probe terhadap instans yang berjalan (dev dan build produksi), audit dependensi |
-| **Kesimpulan** | **BELUM SIAP PRODUKSI.** Dua temuan kritis harus ditutup lebih dulu. |
+| **Kesimpulan** | **BELUM SIAP PRODUKSI** — tidak ada lagi temuan kritis yang terbuka; yang tersisa pekerjaan operasional. |
 
 ---
 
 ## 1. Kesimpulan
 
-Sistem ini **tidak boleh** dipakai di produksi dalam keadaan sekarang.
+Sistem ini **belum boleh** dipakai di produksi — tetapi alasannya sudah berubah sepenuhnya sejak tinjauan pertama.
 
 Bidang tata kelolanya kuat: setiap eksekusi tool melewati registry, kebijakan, gerbang persetujuan, dan verifikasi; retrieval sadar izin; aksi L3/L4 berhenti menunggu manusia. Semua itu diuji dan dibuktikan berjalan.
 
-Yang menggagalkannya adalah hal paling mendasar: **portal tidak punya autentikasi sama sekali**, dan **jejak tata kelolanya hilang saat proses restart**. Kontrol sekuat apa pun tidak berarti bila siapa pun yang menjangkau URL-nya adalah pengguna penuh, dan bukti auditnya menguap.
+Dua temuan kritis yang dulu membatalkan semuanya kini tertutup dan diverifikasi: portal mengautentikasi lewat OIDC (DIPERBAIKI-6), dan jejak tata kelolanya durabel di PostgreSQL (DIPERBAIKI-7). **Tidak ada temuan kritis yang masih terbuka.**
+
+Yang menahan verdict bukan lagi cacat keamanan yang membatalkan lapisan lain, melainkan pekerjaan operasional yang belum dikerjakan: rate limit masih per-instans (TINGGI-1), rahasia masih dari environment (SEDANG-2), TLS dan pembatasan `/api/metrics` adalah keputusan ingress yang belum diambil, dan **belum ada uji penetrasi terhadap deployment nyata**. Butir terakhir itu sendiri sudah cukup untuk menahan go-live: tinjauan ini adalah telaah kode dan probe, bukan serangan.
+
+Satu hal yang perlu dinyatakan jujur tentang cakupan: lapisan AI-nya masih simulasi, sehingga seluruh kelas kerentanan yang melekat pada model sungguhan — prompt injection, ekstraksi data lewat jawaban — belum pernah diuji karena belum ada yang bisa diserang. Lihat §4.
 
 ---
 
@@ -114,9 +118,17 @@ in-process dapat disalahartikan sebagai persistensi.
 | `mysql2` | Penurunan plugin auth membocorkan kata sandi | TANIA memakai PostgreSQL; driver ini tidak pernah dimuat |
 | `@prisma/config`, `prisma` | Turunan dari kedua di atas | — |
 
-**Penilaian.** Jalur eksploitasinya tidak terjangkau pada deployment ini. Ini **risiko yang diterima dengan alasan**, bukan temuan yang diabaikan. Satu-satunya perbaikan yang ditawarkan npm adalah menurunkan Prisma ke 6.x — mundur dari versi yang sengaja dipilih.
+**Penilaian.** Jalur eksploitasinya tidak terjangkau pada deployment ini. Ini **risiko yang diterima dengan alasan**, bukan temuan yang diabaikan:
 
-**Perlu.** Pantau rilis Prisma 7 yang menaikkan `@prisma/config`. Tinjau ulang bila TANIA pernah menyentuh MySQL.
+- `datasource` TANIA adalah `postgresql`. Tidak ada satu pun berkas sumber yang mengimpor `mysql2`, dan tidak ada koneksi MySQL yang pernah dibuka — kode rentannya tidak dapat berjalan.
+- Seluruh rantai masuk lewat satu jalur: `@prisma/client` → CLI `prisma` → sisanya. CLI itu ada di disk pada image API (dibutuhkan `prisma migrate deploy`), tetapi tidak pernah dimuat oleh proses yang melayani permintaan (`apps/api/dist/main`).
+- Tidak ada jalur naik yang stabil. `@prisma/client` dan `prisma` sudah di 7.10.0, versi stabil terbaru; perbaikannya baru ada di Prisma 8, yang saat tinjauan ini masih `8.0.0-rc.15`. Menaikkan ke release candidate demi advisory yang tidak terjangkau adalah menukar risiko nyata dengan risiko teoretis.
+
+**Diperbaiki cara menegakkannya.** Sebelumnya CI menjalankan `npm audit --audit-level=high` dan karena itu **merah permanen**. Gerbang yang selalu merah adalah gerbang yang tidak dibaca — advisory baru yang sungguh-sungguh berbahaya akan mendarat di build yang memang sudah gagal, dan tidak ada yang menyadarinya. Kini `npm run audit` ([`scripts/audit-gate.mjs`](../scripts/audit-gate.mjs)) menimbang temuan terhadap [`security/audit-exceptions.json`](../security/audit-exceptions.json): tiga advisory akar tercatat dengan alasan, sebab tidak ada perbaikan, dan **tanggal kedaluwarsa (31 Desember 2026)**. Gerbang gagal untuk advisory apa pun yang tidak tercatat, dan gagal lagi begitu pengecualiannya lewat tanggal — jadi ini keputusan yang harus diperbarui seseorang, bukan tombol bisu.
+
+Kedua perilaku itu dibuktikan dengan menanam pelanggaran: menghapus satu pengecualian menghasilkan `UNLISTED … exit=1`, memundurkan satu tanggal menghasilkan `EXPIRED … exit=1`, dan pemulihannya kembali hijau.
+
+**Perlu.** Naikkan ke Prisma 8 setelah stabil, lalu hapus ketiga entri itu. Tinjau ulang segera bila TANIA pernah menyentuh MySQL.
 
 > Enam advisory tingkat tinggi awalnya ikut ke dalam image API karena `Dockerfile` menyalin `node_modules` tanpa pemangkasan. Diperbaiki selama tinjauan ini dengan `npm prune --omit=dev`; `undici` dan `tmp` keluar dari pohon runtime sebagai hasilnya.
 
@@ -244,6 +256,22 @@ ini; ketiganya **juga lulus terhadap kode lama**, jadi ini merapikan perilaku
 yang sebelumnya benar secara kebetulan (lewat pengecualian yang ditelan),
 bukan menambal cacat yang teramati.
 
+### DIPERBAIKI-8 — Runtime mengeksekusi perintah tanpa validasi di batasnya
+
+**Ditemukan** 20 September 2026, saat tinjauan keamanan akhir atas `apps/runtime`.
+
+**Bukti.** `apps/api` memasang `ValidationPipe({ whitelist, forbidNonWhitelisted, transform })`; `apps/runtime` tidak memasang apa pun. Controller-nya menerima `@Body() command: JarvisCommand` — sebuah anotasi TypeScript, yang terhapus saat runtime dan karena itu tidak menjamin apa-apa tentang apa yang benar-benar tiba.
+
+**Penilaian.** Dispatcher-nya defensif dan merosot ke `FAILED`/`UNSUPPORTED` alih-alih melempar, tetapi **merosot tidak sama dengan menolak**. Kasus terburuknya konkret: perintah yang menghilangkan `requiresApproval` sama sekali akan lolos gerbang persetujuan, sebab `undefined && …` bernilai falsy. Lapisan yang benar-benar *melakukan sesuatu* justru satu-satunya yang tidak memeriksa masukannya.
+
+**Perbaikan.** DTO class-validator ([`execute-command.dto.ts`](../apps/runtime/src/commands/dto/execute-command.dto.ts)) dengan `requiresApproval` **wajib**, bukan opsional — pemanggil harus menyatakan klaimnya sebelum runtime menimbangnya.
+
+Pipe-nya dideklarasikan sebagai `APP_PIPE` **di dalam modul**, bukan di `main.ts`. Ini bukan selera: aturan yang hidup di entry point hanya melindungi apa yang di-bootstrap entry point itu, sementara tes membangun aplikasi langsung dari modul — suite-nya akan hijau sambil menguji kontrak yang lebih longgar daripada yang dikirim ke produksi.
+
+**Batas yang sengaja ditarik.** Validasi menegakkan *bentuk*, bukan *kosakata kapabilitas*. TANIA dan runtime meng-compile daftar kapabilitas secara terpisah dan dideploy terpisah, jadi nama kapabilitas yang tidak dikenal build ini adalah rupa version skew yang lumrah — dan kontraknya sudah menjawabnya in-band dengan `UNSUPPORTED` + `retryable: false`, yang memberi pemanggil jalan mundur. Menjadikannya 400 akan meratakan "saya belum melayani ini" menjadi "permintaan Anda rusak". `risk` justru kebalikannya: kosakata keselamatan tanpa default yang aman, sehingga nilai asing ditolak langsung.
+
+**Verifikasi.** Delapan tes batas baru; 35 tes kontrak runtime lolos seluruhnya.
+
 ### RENDAH-1 — Tidak ada TLS di artefak yang disediakan
 
 `docker-compose.yml` mengekspos HTTP polos. HSTS hanya dikirim bila permintaan datang lewat HTTPS — disengaja, supaya localhost tidak terkunci ke HTTPS di peramban pengembang. Terminasi TLS adalah tugas ingress dan belum disediakan.
@@ -270,6 +298,9 @@ Diuji terhadap instans yang berjalan, bukan dibaca dari kode.
 | **Kelengkapan catatan** | Catatan tata kelola tidak lengkap **ditolak**, tidak disimpan separuh |
 | **Pemisahan tugas** | `operator` punya `workflow:run` tanpa `workflow:approve`; kombinasi keduanya ditandai |
 | **Penurunan peran** | `applyRoles` **mengganti** scope, tidak menggabungkan — demosi benar-benar berlaku |
+| **Validasi di batas runtime** | Perintah tanpa `requestId`, tanpa `requiresApproval`, dengan `risk` asing, dengan medan tak dikenal, atau dengan timeout absurd → **400** sebelum dispatcher menyentuhnya |
+| **Skew kapabilitas ≠ permintaan rusak** | Kapabilitas di luar kontrak dijawab `UNSUPPORTED` in-band, bukan 400 — pemanggil punya jalan mundur |
+| **Gerbang audit dependensi** | Menanam pelanggaran: pengecualian dihapus → `UNLISTED` exit=1; tanggal dimundurkan → `EXPIRED` exit=1; dipulihkan → hijau |
 | **Tanpa kebocoran penalaran** | Laporan tugas dan catatan tata kelola diuji tidak memuat `prompt`, `reasoning`, `thought` |
 
 ---
@@ -280,7 +311,7 @@ Dinyatakan supaya tidak disalahartikan sebagai lolos.
 
 1. **Uji penetrasi** — tidak dilakukan.
 2. **Keamanan LLM** (prompt injection, ekstraksi data lewat jawaban) — provider masih mock; tidak ada model nyata yang bisa diserang.
-3. **Keamanan JARVIS** — tidak ada runtime nyata; autentikasi ke runtime belum ada.
+3. **Keamanan JARVIS** — runtime clean-room `apps/runtime` kini nyata dan memvalidasi batasnya (DIPERBAIKI-8), dengan penjaga service-token. Isolasi workspace-nya menolak `..`, path absolut, dan pemisah backslash, dengan tes untuk ketiganya. Yang **belum** ditinjau: runtime itu di bawah beban permusuhan, bentuk traversal yang lebih niat (persentase-encoding, normalisasi unicode, symlink) di luar ketiga bentuk polos tersebut, dan mTLS antara TANIA dan runtime.
 4. **Keamanan rantai pasok** di luar `npm audit` — tanpa SBOM, tanpa penandatanganan artefak.
 5. **DoS di tingkat infrastruktur** — di luar rate limit aplikasi.
 
@@ -290,12 +321,12 @@ Dinyatakan supaya tidak disalahartikan sebagai lolos.
 
 | # | Wajib | Status |
 |---|---|---|
-| 1 | Adapter OIDC + sesi cookie di portal | **belum** |
-| 2 | Sink tata kelola durabel di PostgreSQL | **belum** |
+| 1 | Adapter OIDC + sesi cookie di portal | **selesai** (DIPERBAIKI-6) |
+| 2 | Sink tata kelola durabel di PostgreSQL | **selesai** (DIPERBAIKI-7) |
 | 3 | Rate limit di Redis | **belum** |
 | 4 | `/api/metrics` dibatasi di ingress | keputusan deployment |
 | 5 | Rahasia dari pengelola rahasia dengan rotasi | **belum** |
 | 6 | Terminasi TLS + HSTS di ingress | keputusan deployment |
 | 7 | Uji penetrasi terhadap deployment nyata | **belum** |
 
-Nomor 1 dan 2 memblokir. Sisanya harus ada rencananya sebelum go-live.
+Nomor 1 dan 2 dulu memblokir dan kini tertutup. Dari sisanya, **nomor 7 tetap memblokir**: sistem yang memegang data perusahaan dan mengeksekusi aksi tidak boleh go-live hanya berbekal telaah kode. Nomor 3 dan 5 harus selesai; nomor 4 dan 6 adalah keputusan ingress yang harus diambil, bukan ditemukan saat insiden.

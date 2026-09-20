@@ -60,6 +60,55 @@ describe('authentication', () => {
   });
 });
 
+describe('validation at the boundary', () => {
+  /**
+   * The execution layer is the worst place to be lenient. TypeScript types are
+   * erased at runtime, so without a pipe `@Body() command: JarvisCommand`
+   * asserts nothing about what arrived.
+   */
+  it('refuses a command with no requestId', async () => {
+    const { requestId: _omitted, ...rest } = command();
+    await send(rest).expect(400);
+  });
+
+  it('refuses a capability that is not even a string', async () => {
+    // The edge owns shape. An unknown capability *name* is version skew and is
+    // answered in-band with UNSUPPORTED (see 'answers UNSUPPORTED for a
+    // capability outside the contract'); a number is a broken caller.
+    await send({ ...command(), capability: 42 }).expect(400);
+  });
+
+  it('refuses a risk level it does not recognise', async () => {
+    await send({ ...command(), risk: 'APOCALYPTIC' }).expect(400);
+  });
+
+  it('refuses a command that omits requiresApproval', async () => {
+    // The field decides whether the approval guard engages at all, and an
+    // omitted one reads as "no approval needed" — `undefined && …` is falsy.
+    // Demanding it means a caller states the claim before it is weighed.
+    const { requiresApproval: _omitted, ...rest } = command();
+    await send(rest).expect(400);
+  });
+
+  it('refuses requiresApproval sent as a string', async () => {
+    await send({ ...command(), requiresApproval: 'false' }).expect(400);
+  });
+
+  it('refuses an unrecognised field', async () => {
+    // A caller and a runtime that disagree about the contract should stop,
+    // not guess which of them is right.
+    await send({ ...command(), escalate: true }).expect(400);
+  });
+
+  it('refuses an absurd timeout', async () => {
+    await send({ ...command(), timeoutMs: 999_999_999 }).expect(400);
+  });
+
+  it('accepts a well-formed command', async () => {
+    await send(command()).expect(201);
+  });
+});
+
 describe('the result contract', () => {
   it('returns every field the contract names', async () => {
     const response = await send(command()).expect(201);

@@ -2,7 +2,7 @@
 
 | Item | Keterangan |
 |---|---|
-| Tanggal | 19 September 2026 |
+| Tanggal | 20 September 2026 |
 | **Verdict** | **BELUM SIAP PRODUKSI** — tetapi kedua pemblokir utama sudah ditutup |
 | Pemblokir | ~~Portal tanpa autentikasi~~ · ~~jejak tata kelola tidak durabel~~ — keduanya diperbaiki 19 September 2026 |
 | Detail keamanan | [`security-review.md`](security-review.md) |
@@ -46,7 +46,7 @@ Legenda: **✅ siap** · **⚠️ sebagian** · **❌ belum**
 | RAG sadar izin | ✅ | Filter sebelum penilaian; diuji termasuk kebocoran lewat judul |
 | Sesi aman | ✅ | Cookie HS256 httpOnly/SameSite=Lax/Secure, TTL terbatas, payload disunting ditolak |
 | Proteksi CSRF | ✅ | Pemeriksaan origin pada metode yang mengubah state; terverifikasi 403/200 |
-| Validasi input | ✅ | Di setiap batas API, dengan batas ukuran |
+| Validasi input | ✅ | Di ketiga batas API — portal (batas ukuran badan), `apps/api`, dan `apps/runtime` (`ValidationPipe` dengan `whitelist` + `forbidNonWhitelisted`, dideklarasikan di modul sehingga tes memakai aturan yang sama dengan produksi) |
 | Rate limiting | ⚠️ | Bekerja per instans; belum terdistribusi |
 | Manajemen rahasia | ⚠️ | Tersamar di log dan UI; sumbernya masih environment |
 | Security headers | ✅ | CSP ber-nonce tanpa pelanggaran di produksi, HSTS, dan lainnya |
@@ -96,7 +96,7 @@ Jejak tata kelola hanya tampil bagi pemegang `audit:read`.
 | Health check | ✅ | `/api/health` dengan status dependensi |
 | Readiness check | ✅ | `/api/ready`, terpisah dari liveness; 503 tanpa backend |
 | Error monitoring | ❌ | Belum ada Sentry atau sepadan |
-| CI/CD | ⚠️ | CI lengkap (lint, typecheck, unit, e2e, audit, build image). **Belum ada CD** |
+| CI/CD | ⚠️ | CI lengkap dan **benar-benar berjalan** (lint, typecheck, unit, e2e, interop, audit, build image). Gerbang audit kini menimbang pengecualian bertanggal, bukan merah permanen. **Belum ada CD** |
 
 ---
 
@@ -108,7 +108,7 @@ Dijalankan di repositori ini, bukan dikutip dari harapan.
 |---|---|
 | `npm run lint` | lolos |
 | `npm run typecheck` | lolos |
-| Unit + integrasi | **680 lolos** |
+| Unit + integrasi | **693 lolos** — 658 portal + 35 kontrak runtime |
 | E2E backend (PostgreSQL asli) | **30 lolos** — termasuk 11 untuk store durabel |
 | Smoke test artefak produksi | **18/18** — termasuk 5 pemeriksaan autentikasi |
 | Production build | lolos; portal berjalan dari output standalone |
@@ -123,7 +123,7 @@ Disebut terpisah karena mudah tertutup oleh kedalaman lapisan di atasnya.
 | Identitas portal | **Nyata** bila OIDC dikonfigurasi; `mock` hanya untuk pengembangan dan ditolak di produksi |
 | LLM | Mock deterministik |
 | Retrieval eksternal | Mock; korpus bawaan 11 dokumen |
-| JARVIS | Sepuluh kapabilitas simulasi kecuali `JARVIS_BASE_URL` diarahkan ke runtime nyata |
+| JARVIS | Runtime clean-room ada di repositori (`apps/runtime`, 35 tes kontrak + interop terhadap proses nyata). Kapabilitas yang dilayaninya bekerja sungguhan di dalam workspace-nya; yang di luar kontrak dijawab `UNSUPPORTED`, bukan ditebak. Integrasi ke sistem perusahaan tetap belum ada |
 | Aset avatar 3D | Fikstur, bukan avatar |
 | Sumber insight | KPI, inisiatif, dan risiko dari data contoh; dokumen dan riwayat tugas nyata |
 | Tugas, memori, jejak tata kelola | **Durabel di PostgreSQL** bila backend dikonfigurasi |
@@ -144,6 +144,8 @@ Disebut terpisah karena mudah tertutup oleh kedalaman lapisan di atasnya.
 Butir 1 dan 2 tidak dapat dinegosiasikan dan kini tertutup. Sisanya boleh
 berjalan paralel.
 
-> Satu hal yang tetap berlaku di seluruh daftar ini: repositori belum berupa
-> repositori git, sehingga tidak satu pun gerbang CI di atas pernah berjalan.
-> Itu Fase 0 pada [`architecture/gap-analysis.md`](architecture/gap-analysis.md).
+> Catatan sebelumnya di tempat ini menyatakan repositori belum berupa
+> repositori git sehingga tidak satu pun gerbang CI pernah berjalan. Itu tidak
+> lagi berlaku: repositori sudah di bawah kendali versi dan seluruh gerbang di
+> §3 berjalan di CI. Fase 0 pada
+> [`architecture/gap-analysis.md`](architecture/gap-analysis.md) selesai.

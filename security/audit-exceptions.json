@@ -1,0 +1,30 @@
+{
+  "$comment": "Advisories accepted for production dependencies, with an expiry. An entry is a decision someone has to renew, not a mute button: the gate goes red again the day it lapses, or the moment any advisory appears that is not listed here. Reviewed against docs/security-review.md.",
+  "reviewedOn": "2026-09-20",
+  "exceptions": [
+    {
+      "id": "GHSA-ggr8-5vv4-36mx",
+      "package": "deepmerge-ts",
+      "path": "@prisma/client > prisma > @prisma/config > deepmerge-ts",
+      "reason": "Stack exhaustion when merging recursive objects. Reached only by the Prisma CLI while loading our own config file; the input is ours, not a user's. Not loaded by the serving process (apps/api/dist/main).",
+      "noFixBecause": "Resolved only in Prisma 8, which is 8.0.0-rc at time of review. 7.10.0 is the newest stable.",
+      "expires": "2026-12-31"
+    },
+    {
+      "id": "GHSA-3f6p-5ww8-9rcr",
+      "package": "mysql2",
+      "path": "@prisma/client > prisma > mysql2",
+      "reason": "TANIA's datasource is postgresql. Nothing imports mysql2 and no MySQL connection is ever opened, so the vulnerable code path cannot run.",
+      "noFixBecause": "Resolved only in Prisma 8 (release candidate).",
+      "expires": "2026-12-31"
+    },
+    {
+      "id": "GHSA-rgwj-5xj2-c3m3",
+      "package": "mysql2",
+      "path": "@prisma/client > prisma > mysql2",
+      "reason": "As above: a MySQL driver in a PostgreSQL deployment, present on disk in the api image but never loaded.",
+      "noFixBecause": "Resolved only in Prisma 8 (release candidate).",
+      "expires": "2026-12-31"
+    }
+  ]
+}

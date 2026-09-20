@@ -21,9 +21,14 @@ npm --workspace @tania/api run db:embedded     # terminal 1
 npm --workspace @tania/api run db:deploy       # sekali, menerapkan migrasi
 npm --workspace @tania/api run start:dev       # terminal 2
 npm --workspace @tania/web run dev             # terminal 3
+npm run dev:runtime                            # terminal 4, opsional
 ```
 
-Portal di `http://localhost:3000`, backend di `:4000`.
+Portal di `http://localhost:3000`, backend di `:4000`, runtime di `:4100`.
+
+Runtime hanya perlu dijalankan bila ingin eksekusi sungguhan alih-alih simulasi;
+arahkan `TANIA_RUNTIME_ADAPTER=jarvis` dan `JARVIS_BASE_URL` kepadanya. Tanpa itu
+portal memakai adapter simulasi dan tetap berfungsi penuh.
 
 ### Berbentuk produksi, lewat Docker
 
@@ -174,12 +179,26 @@ Perilaku berikut tampak seperti bug dan bukan.
 ## 6. Menjalankan Gerbang Mutu
 
 ```bash
-npm run verify     # lint, typecheck, unit + integrasi, production build
-npm run test:e2e   # e2e backend terhadap PostgreSQL sungguhan
-npm audit --omit=dev --audit-level=high
+npm run verify       # lint, typecheck, unit + integrasi, production build
+npm run test:e2e     # e2e backend terhadap PostgreSQL sungguhan
+npm run test:interop # adapter TANIA terhadap proses runtime yang benar-benar berjalan
+npm run test:smoke   # 18 pemeriksaan terhadap artefak produksi yang sudah dibangun
+npm run audit        # advisory produksi, ditimbang terhadap pengecualian bertanggal
 ```
 
-CI menjalankan ketiganya ditambah build image pada setiap pull request.
+CI menjalankan seluruhnya ditambah build image pada setiap pull request.
+
+### Ketika `npm run audit` merah
+
+Gerbang ini **bukan** `npm audit` polos. Ia gagal hanya untuk advisory tinggi/kritis di dependensi produksi yang tidak tercatat di [`security/audit-exceptions.json`](../security/audit-exceptions.json), atau yang tercatat tetapi sudah lewat tanggal kedaluwarsanya. Dua pesan yang mungkin muncul:
+
+| Pesan | Artinya | Tindakan |
+|---|---|---|
+| `UNLISTED <id>` | Advisory baru masuk ke pohon produksi | Naikkan versinya. Bila tidak ada perbaikan, catat keputusannya — dengan alasan, sebab tidak ada perbaikan, dan tanggal kedaluwarsa |
+| `EXPIRED <id>` | Pengecualian yang dulu diterima sudah lewat tanggal | **Periksa ulang apakah perbaikannya kini ada**, lalu naikkan versinya atau perbarui tanggalnya dengan sadar |
+| `stale <id>` | Pengecualian untuk advisory yang sudah tidak ada di pohon | Hapus entri itu (peringatan saja, tidak menggagalkan) |
+
+Menambah entri ke berkas pengecualian adalah keputusan keamanan, bukan cara membuat CI hijau. Setiap entri harus menyebut mengapa jalur eksploitasinya tidak terjangkau pada deployment ini. Konteks untuk tiga entri yang ada sekarang: [`security-review.md` SEDANG-3](security-review.md).
 
 ---
 

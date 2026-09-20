@@ -23,7 +23,8 @@
     "db:deploy": "npm run db:deploy --workspace @tania/api",
     "clean": "rm -rf packages/*/dist apps/api/dist apps/web/.next",
     "dev:runtime": "npm run start:dev --workspace @tania/runtime",
-    "test:interop": "npm run build:packages && npm run build --workspace @tania/runtime && npm run test:interop --workspace @tania/web"
+    "test:interop": "npm run build:packages && npm run build --workspace @tania/runtime && npm run test:interop --workspace @tania/web",
+    "audit": "node scripts/audit-gate.mjs"
   },
   "devDependencies": {
     "oxlint": "^1.58.0",

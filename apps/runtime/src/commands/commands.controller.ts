@@ -3,6 +3,7 @@ import type { JarvisCommand, JarvisResult } from '@tania/types';
 import { CommandsService } from './commands.service.js';
 import { ServiceTokenGuard } from '../auth/service-token.guard.js';
 import { TOOL_MANIFEST } from '../manifest/tool-manifest.js';
+import { ExecuteCommandDto } from './dto/execute-command.dto.js';
 
 /**
  * The whole surface TANIA talks to.
@@ -17,8 +18,8 @@ export class CommandsController {
   constructor(private readonly commands: CommandsService) {}
 
   @Post('commands')
-  async execute(@Body() command: JarvisCommand): Promise<JarvisResult> {
-    return this.commands.execute(command);
+  async execute(@Body() command: ExecuteCommandDto): Promise<JarvisResult> {
+    return this.commands.execute(command as JarvisCommand);
   }
 
   /**

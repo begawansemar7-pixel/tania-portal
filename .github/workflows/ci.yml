@@ -87,10 +87,12 @@ jobs:
 
       - run: npm ci --ignore-scripts
 
-      # Fails the build on a high or critical advisory. Moderate findings are
-      # reported without blocking: a transitive moderate in a dev-only tool
-      # should not stop a security fix from shipping.
-      - run: npm audit --audit-level=high
+      # Fails on any high or critical advisory in production dependencies that
+      # is not recorded in security/audit-exceptions.json, and on any recorded
+      # exception whose expiry has passed. Plain `npm audit --audit-level=high`
+      # stayed red on four unfixable transitives inside the Prisma CLI subtree,
+      # and a job that is always red is a job nobody reads.
+      - run: npm run audit
 
   interop:
     name: Adapter against the real runtime
