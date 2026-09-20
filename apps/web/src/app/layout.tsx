@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Caveat, Inter } from "next/font/google";
 import "./globals.css";
+import { DemoBanner } from "@/components/layout/demo-banner";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -41,7 +42,10 @@ export default function RootLayout({
       lang="id"
       className={`${inter.variable} ${caveat.variable} h-full antialiased`}
     >
-      <body className="min-h-full font-sans">{children}</body>
+      <body className="min-h-full font-sans">
+        <DemoBanner />
+        {children}
+      </body>
     </html>
   );
 }

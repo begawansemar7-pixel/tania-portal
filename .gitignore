@@ -37,3 +37,5 @@ AGENT-TANIA/
 # The Supabase talent portal, on a different account
 # (henriset2026-stack/tania-portal) and currently in detached HEAD.
 .kilo/
+.vercel
+.env*

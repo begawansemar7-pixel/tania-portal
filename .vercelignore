@@ -1,0 +1,13 @@
+# Build outputs — Vercel rebuilds these from source.
+.next
+dist
+out
+coverage
+playwright-report
+test-results
+
+# Local-only material that has no business in a deployment upload.
+AGENT-TANIA
+.kilo
+*.log
+.env.local

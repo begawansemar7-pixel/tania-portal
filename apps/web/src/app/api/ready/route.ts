@@ -1,6 +1,7 @@
 import { correlationFrom } from '@tania/config';
 import { getPersistenceStatus } from '@/lib/tania/container';
 import { limiterHealth } from '@/lib/governance';
+import { config } from '@/lib/config/env';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,6 +41,14 @@ export async function GET(request: Request): Promise<Response> {
   const limiter = limiterHealth();
 
   const advisories = [
+    {
+      name: 'auth.demo',
+      ok: config.auth.demo !== true,
+      detail:
+        config.auth.demo === true
+          ? 'TANIA_INSECURE_DEMO is on — every visitor is one actor holding every scope. Evaluation only.'
+          : 'ok',
+    },
     {
       name: 'rate_limit.distributed',
       ok: limiter.distributed,

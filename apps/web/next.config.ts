@@ -6,8 +6,12 @@ const nextConfig: NextConfig = {
   /**
    * Traces the files the server actually needs, so the runtime image carries a
    * pruned `node_modules` instead of the whole workspace.
+   *
+   * Skipped on Vercel, which builds its own output format and does not want a
+   * self-contained server directory. Keeping it on there produces a build that
+   * succeeds and then serves nothing, which is a slow way to find out.
    */
-  output: 'standalone',
+  ...(process.env.VERCEL ? {} : { output: 'standalone' as const }),
   /**
    * `fileURLToPath`, not `URL.pathname`: the latter stays percent-encoded, so a
    * checkout under a directory with a space resolves to a path that does not

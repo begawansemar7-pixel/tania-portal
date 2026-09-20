@@ -90,6 +90,16 @@ export function createIdentityProvider(cfg: TaniaConfig): IdentityProvider {
     return new OidcIdentityProvider(cfg.auth.session.secret);
   }
 
+  if (cfg.auth.demo) {
+    logger.error('auth.insecure_demo', {
+      audit: true,
+      reason:
+        'TANIA_INSECURE_DEMO permits mock identity in a production build. Every visitor is one actor ' +
+        'holding every scope, including workflow:approve. Evaluation deployments only — never for real data.',
+    });
+    return new MockIdentityProvider();
+  }
+
   if (cfg.auth.insecure) {
     logger.error('auth.refused_insecure_mode', {
       reason:

@@ -90,6 +90,24 @@ export const ENV_SCHEMA = {
   TANIA_AUDIT_ENABLED: bool({ default: true }),
 
   /**
+   * Permits mock identity in a production build — for evaluation deployments only.
+   *
+   * A separate door rather than a loosening of the existing one. `mock` resolves
+   * every visitor to a single actor holding every scope, `workflow:approve`
+   * included, which is why a production build normally refuses to authenticate
+   * anyone at all. But a preview deployment is built with NODE_ENV=production
+   * too, so without an explicit opt-in an evaluation instance is a shell where
+   * every call is 401.
+   *
+   * It has to be set deliberately, it is named so that nobody reads it as
+   * routine, it is refused outright unless the mode is already `mock`, and the
+   * instance announces it — startup log, readiness advisory, and a banner on
+   * every page. An insecure deployment that does not say so is the thing this
+   * whole file exists to prevent.
+   */
+  TANIA_INSECURE_DEMO: bool({ default: false }),
+
+  /**
    * How the portal decides who is asking.
    *
    * `mock` resolves every visitor to one development actor holding every
@@ -249,6 +267,14 @@ export interface AuthConfig {
   oidc?: OidcPortalConfig;
   session: { secret: string; ttlSeconds: number };
   /**
+   * Mock identity knowingly permitted in a production build.
+   *
+   * Distinct from `insecure`, which means the same situation was **not**
+   * acknowledged and is therefore refused. This one is acknowledged, and every
+   * surface that can say so does.
+   */
+  demo?: boolean;
+  /**
    * True when this deployment would authenticate nobody in production.
    *
    * Reported rather than thrown, because configuration is evaluated during
@@ -293,9 +319,14 @@ export function resolveAuth(env: Env): AuthConfig {
   const production = env.NODE_ENV === 'production';
 
   if (env.TANIA_AUTH_MODE === 'mock') {
+    // The opt-in only reaches this branch, so it can never rescue a
+    // misconfigured `oidc` deployment into serving unauthenticated traffic.
+    const demo = production && env.TANIA_INSECURE_DEMO;
+
     return {
       mode: 'mock',
-      insecure: production,
+      insecure: production && !demo,
+      demo,
       session: {
         secret: env.TANIA_SESSION_SECRET ?? DEV_SESSION_SECRET,
         ttlSeconds: env.TANIA_SESSION_TTL_SECONDS,
