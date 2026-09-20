@@ -5,6 +5,7 @@
 | Tanggal | 20 September 2026 |
 | **Verdict** | **BELUM SIAP PRODUKSI** — tetapi kedua pemblokir utama sudah ditutup |
 | Pemblokir | ~~Portal tanpa autentikasi~~ · ~~jejak tata kelola tidak durabel~~ — keduanya diperbaiki 19 September 2026 |
+| Asesmen penuh | [`production-assessment.md`](production-assessment.md) — scorecard 17 lapisan, model ancaman, daftar periksa deployment |
 | Detail keamanan | [`security-review.md`](security-review.md) |
 | Cara menjalankan | [`operations-runbook.md`](operations-runbook.md) |
 
@@ -108,7 +109,7 @@ Dijalankan di repositori ini, bukan dikutip dari harapan.
 |---|---|
 | `npm run lint` | lolos |
 | `npm run typecheck` | lolos |
-| Unit + integrasi | **693 lolos** — 658 portal + 35 kontrak runtime |
+| Unit + integrasi | **700 lolos** — 665 portal + 35 kontrak runtime |
 | E2E backend (PostgreSQL asli) | **30 lolos** — termasuk 11 untuk store durabel |
 | Smoke test artefak produksi | **18/18** — termasuk 5 pemeriksaan autentikasi |
 | Production build | lolos; portal berjalan dari output standalone |

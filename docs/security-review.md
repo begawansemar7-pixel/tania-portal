@@ -4,6 +4,7 @@
 |---|---|
 | Tanggal | 20 September 2026 |
 | Lingkup | Portal `apps/web`, backend `apps/api`, runtime `apps/runtime`, paket bersama, dan artefak deployment |
+| Asesmen penuh | [`production-assessment.md`](production-assessment.md) — 17 lapisan, model ancaman 8 kategori |
 | Metode | Telaah kode, probe terhadap instans yang berjalan (dev dan build produksi), audit dependensi |
 | **Kesimpulan** | **BELUM SIAP PRODUKSI** — tidak ada lagi temuan kritis yang terbuka; yang tersisa pekerjaan operasional. |
 
@@ -271,6 +272,22 @@ Pipe-nya dideklarasikan sebagai `APP_PIPE` **di dalam modul**, bukan di `main.ts
 **Batas yang sengaja ditarik.** Validasi menegakkan *bentuk*, bukan *kosakata kapabilitas*. TANIA dan runtime meng-compile daftar kapabilitas secara terpisah dan dideploy terpisah, jadi nama kapabilitas yang tidak dikenal build ini adalah rupa version skew yang lumrah — dan kontraknya sudah menjawabnya in-band dengan `UNSUPPORTED` + `retryable: false`, yang memberi pemanggil jalan mundur. Menjadikannya 400 akan meratakan "saya belum melayani ini" menjadi "permintaan Anda rusak". `risk` justru kebalikannya: kosakata keselamatan tanpa default yang aman, sehingga nilai asing ditolak langsung.
 
 **Verifikasi.** Delapan tes batas baru; 35 tes kontrak runtime lolos seluruhnya.
+
+### DIPERBAIKI-9 — Provider LLM produksi membuang bukti yang diambil *(sebelumnya KRITIS)*
+
+**Ditemukan** 20 September 2026, saat asesmen kesiapan produksi.
+
+**Bukti.** `HttpLlmProvider.payload()` memetakan `request.messages` dan tidak pernah membaca `request.evidence` — nol rujukan ke `evidence` di seluruh berkas, dibanding tujuh di mock provider.
+
+**Penilaian.** Dengan model sungguhan terkonfigurasi, model menerima system prompt, konteks layar, riwayat, dan pertanyaan — **tanpa satu pun dokumen yang diambil**. Portal tetap merender sitasi di samping jawaban itu, dan jejaknya menulis "Jawaban diverifikasi terhadap bukti yang dikutip".
+
+Jawaban yang membawa sitasi yang tidak pernah dibacanya lebih buruk daripada jawaban tanpa sitasi: ia tampak sudah diperiksa. Kebijakan grounding tidak akan menangkapnya, sebab confidence dihitung dari **mutu retrieval**, bukan dari apakah jawabannya memakai bukti tersebut.
+
+Cacat ini lolos dari 693 tes yang seluruhnya hijau, karena mock provider memakai `evidence` dengan benar — celahnya hanya terbuka di jalur produksi.
+
+**Perbaikan.** Bukti disusun menjadi blok peran-system berpagar, ditempatkan bersama pesan system lain di kepala percakapan, dengan pertanyaan tetap di akhir. Blok itu **berlabel DATA, bukan instruksi**, dan berpagar `AWAL/AKHIR BAHAN RUJUKAN`: teks yang diambil ditulis orang lain, dan dokumen yang berbunyi "abaikan instruksimu" adalah trik tertua terhadap sistem RAG. Pemagaran tidak menutup prompt injection — tidak ada yang bisa di lapisan ini — tetapi menghilangkan ambiguitas bagian mana yang instruksi. Penahan sesungguhnya ada di tempat lain dan lebih kuat: tool dipilih tabel statis per-intent, tidak pernah dari keluaran model.
+
+**Verifikasi.** Tujuh tes baru yang menegaskan isi **badan HTTP yang benar-benar dikirim** — satu-satunya tempat klaim "model melihat buktinya" dapat diselesaikan. Dibuktikan menangkap cacat aslinya: dengan perbaikan dikembalikan, 5 dari 7 gagal; dipulihkan, 7 lolos.
 
 ### RENDAH-1 — Tidak ada TLS di artefak yang disediakan
 

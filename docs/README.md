@@ -24,6 +24,7 @@ historis, bukan sebagai deskripsi keadaan sekarang.
 
 | Dokumen | Isi |
 |---|---|
+| [`production-assessment.md`](production-assessment.md) | Asesmen kesiapan produksi: scorecard 17 lapisan, model ancaman 8 kategori, pemblokir, daftar periksa deployment |
 | [`production-readiness.md`](production-readiness.md) | Daftar periksa kesiapan produksi dan **verdict** |
 | [`security-review.md`](security-review.md) | Temuan keamanan, yang terverifikasi berjalan, dan yang memblokir |
 | [`operations-runbook.md`](operations-runbook.md) | Menjalankan, memantau, dan menangani kegagalan |
