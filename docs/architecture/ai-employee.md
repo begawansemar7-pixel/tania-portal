@@ -2,7 +2,7 @@
 
 | Item | Keterangan |
 |---|---|
-| Versi dokumen | 1.0 |
+| Versi dokumen | **1.1** |
 | Tanggal | 19 September 2026 |
 | Status | **Terimplementasi** — 498 test hijau (32 di antaranya untuk lapisan ini), diverifikasi end-to-end |
 | Lingkup | Kategori kapabilitas, artefak tugas, My Work, dan insight proaktif |
@@ -109,6 +109,46 @@ Empat keputusan yang membentuk lapisan ini:
 - **Judul pun adalah pengungkapan.** Dokumen difilter menurut izin **sebelum** detektor melihatnya, jadi TANIA tidak pernah menyebutkan keberadaan sesuatu yang tidak boleh diakses.
 
 ---
+
+## 5b. Satu-satunya Komponen yang Berjalan Tanpa Diminta
+
+Setiap jalur lain melalui TANIA dimulai dari permintaan: seseorang mengetik,
+menekan mikrofon, atau memutuskan sebuah persetujuan. **Insight proaktif
+tidak** — ia memindai menurut jadwalnya sendiri.
+
+Itu menjadikannya satu-satunya tempat di mana "eksekusi otonom tanpa kendali"
+benar-benar bisa bermula, dan itulah sebabnya brief melarangnya secara
+eksplisit.
+
+Detektor hari ini **mengamati dan mengusulkan**: mereka mengembalikan
+`suggestedPrompt` untuk dikirim manusia, dan pekerjaannya lalu masuk kembali
+lewat jalur tugas biasa — dengan policy engine, pagu risiko, dan gerbang
+persetujuan semuanya berada di depannya. `employee.test.ts` membuktikan itu
+untuk detektor yang ada.
+
+Yang tidak bisa dibuktikannya adalah perilaku detektor **berikutnya**. Sebuah
+detektor yang mengimpor composition root dapat memanggil orkestrator langsung,
+dan tidak satu pun tes perilaku akan menyadarinya — semuanya memeriksa keluaran
+detektor yang sudah dikenal.
+
+`insight-isolation.test.ts` memeriksa apa yang **sanggup dijangkau** sebuah
+detektor:
+
+| Aturan | Gagal bila |
+|---|---|
+| Daftar impor tertutup | Mengimpor apa pun di luar tipe, port, dan logger |
+| Tidak menjangkau eksekusi | Impor cocok `container`, `orchestration`, `runtime`/`jarvis`, `tools/`, atau `approvals/` — masing-masing dengan alasannya tercetak saat gagal |
+| Setiap kind punya detektor | Salah satu dari lima `INSIGHT_KINDS` tidak diangkat detektor mana pun — kind yang dideklarasikan tetapi tak pernah diangkat tampak terjaga padahal tidak |
+| Tidak ada kind di luar kontrak | Detektor mengangkat kind yang tidak dideklarasikan |
+
+Daftar kind dibaca **dari detektornya sendiri**, bukan dari senarai yang
+dipelihara tangan — senarai adalah hal yang basi, dan tes yang memeriksa senarai
+terhadap dirinya sendiri selalu lulus.
+
+> **Dibuktikan menyala.** Sebuah detektor yang mengimpor
+> `@/lib/tania/container` ditanam sementara: dua tes gagal, menyebut berkas dan
+> alasannya — *"it could reach the orchestrator and start work unprompted"*.
+
 
 ## 6. State yang Dibagi Satu Proses
 
