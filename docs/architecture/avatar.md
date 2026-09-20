@@ -148,6 +148,28 @@ Wajah yang tidak berkedip adalah sinyal paling jelas bahwa sebuah karakter macet
 
 ---
 
+## 3c. Melepas Memori GPU
+
+Three.js **tidak** membebaskan apa pun ketika objek meninggalkan scene:
+geometry, material, dan texture tetap di GPU sampai dilepas dengan tangan.
+Avatar dipasang dan dilepas secara rutin — berpindah layar, melewati breakpoint
+ponsel, hot reload — sehingga satu `dispose` yang terlewat adalah kebocoran yang
+tumbuh sampai tab dimuat ulang.
+
+`MorphTargetRig.dispose` menelusuri seluruh pohon dan melepas ketiganya;
+`TaniaAvatar` menghentikan mixer dan membersihkan cache loader pada unmount.
+
+> **Sebelumnya tidak diuji sama sekali.** Menghapus baris mana pun dari
+> `dispose` akan lolos seluruh suite, karena tidak ada tes lain yang merender.
+> `avatar-disposal.test.ts` kini menutup delapan hal: geometry, material,
+> **texture** (yang paling mahal — peta albedo 2K hidup lebih lama daripada
+> material yang merujuknya), mesh multi-material, mesh yang bersarang dalam,
+> beberapa mesh sekaligus, simpul biasa tanpa material, morph target yang
+> dilupakan, dan pemanggilan ganda.
+>
+> Dibuktikan menyala: menghapus pelepasan texture menggagalkan dua tes.
+
+
 ## 4. Tidak Pernah Memblokir
 
 ```mermaid
