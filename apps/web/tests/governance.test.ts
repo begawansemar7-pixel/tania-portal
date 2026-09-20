@@ -224,11 +224,11 @@ describe('rate limiting', () => {
     const limiter = new InProcessRateLimiter(time.now);
     const rule = { limit: 3, windowMs: 60_000 };
 
-    expect(limiter.check('a', rule).allowed).toBe(true);
-    expect(limiter.check('a', rule).allowed).toBe(true);
-    expect(limiter.check('a', rule).allowed).toBe(true);
+    expect(limiter.checkSync('a', rule).allowed).toBe(true);
+    expect(limiter.checkSync('a', rule).allowed).toBe(true);
+    expect(limiter.checkSync('a', rule).allowed).toBe(true);
 
-    const refused = limiter.check('a', rule);
+    const refused = limiter.checkSync('a', rule);
     expect(refused.allowed).toBe(false);
     expect(refused.remaining).toBe(0);
     expect(refused.retryAfter).toBeGreaterThan(0);
@@ -238,8 +238,8 @@ describe('rate limiting', () => {
     const limiter = new InProcessRateLimiter(clock().now);
     const rule = { limit: 1, windowMs: 60_000 };
 
-    limiter.check('a', rule);
-    expect(limiter.check('b', rule).allowed).toBe(true);
+    limiter.checkSync('a', rule);
+    expect(limiter.checkSync('b', rule).allowed).toBe(true);
   });
 
   it('starts a new window once the old one passes', () => {
@@ -247,18 +247,18 @@ describe('rate limiting', () => {
     const limiter = new InProcessRateLimiter(time.now);
     const rule = { limit: 1, windowMs: 1000 };
 
-    limiter.check('a', rule);
-    expect(limiter.check('a', rule).allowed).toBe(false);
+    limiter.checkSync('a', rule);
+    expect(limiter.checkSync('a', rule).allowed).toBe(false);
 
     time.advance(1001);
-    expect(limiter.check('a', rule).allowed).toBe(true);
+    expect(limiter.checkSync('a', rule).allowed).toBe(true);
   });
 
   it('drops expired buckets so a long-lived process does not grow', () => {
     const time = clock();
     const limiter = new InProcessRateLimiter(time.now);
 
-    limiter.check('a', { limit: 1, windowMs: 1000 });
+    limiter.checkSync('a', { limit: 1, windowMs: 1000 });
     expect(limiter.size()).toBe(1);
 
     time.advance(2000);
@@ -277,13 +277,13 @@ describe('rate limiting', () => {
     const rule = { limit: 5, windowMs: 1000 };
 
     for (let subject = 0; subject < 50; subject += 1) {
-      limiter.check(`subject-${subject}`, rule);
+      limiter.checkSync(`subject-${subject}`, rule);
     }
     expect(limiter.size()).toBe(50);
 
     // Every one of those windows has passed; one live subject remains.
     time.advance(1001);
-    limiter.check('someone-new', rule);
+    limiter.checkSync('someone-new', rule);
 
     expect(limiter.size()).toBe(1);
   });
@@ -293,13 +293,13 @@ describe('rate limiting', () => {
     const limiter = new InProcessRateLimiter(time.now);
     const rule = { limit: 2, windowMs: 1000 };
 
-    limiter.check('a', rule);
+    limiter.checkSync('a', rule);
     time.advance(1001);
 
     // The sweep fires here; it must not resurrect or corrupt a live budget.
-    expect(limiter.check('a', rule).allowed).toBe(true);
-    expect(limiter.check('a', rule).allowed).toBe(true);
-    expect(limiter.check('a', rule).allowed).toBe(false);
+    expect(limiter.checkSync('a', rule).allowed).toBe(true);
+    expect(limiter.checkSync('a', rule).allowed).toBe(true);
+    expect(limiter.checkSync('a', rule).allowed).toBe(false);
   });
 
   it('does not sweep on every call', () => {
@@ -311,7 +311,7 @@ describe('rate limiting', () => {
     // not per-request, so a busy process does not pay O(subjects) each time.
     for (let subject = 0; subject < 20; subject += 1) {
       time.advance(10);
-      limiter.check(`subject-${subject}`, rule);
+      limiter.checkSync(`subject-${subject}`, rule);
     }
 
     expect(limiter.size()).toBe(20);
@@ -424,7 +424,7 @@ describe('cross-site protection', () => {
     });
   });
 
-  it('leaves reads alone', () => {
+  it('leaves reads alone', async () => {
     const read = new Request('https://tania.test/api/tania/tasks', {
       method: 'GET',
       headers: { origin: 'https://evil.test' },
@@ -433,18 +433,21 @@ describe('cross-site protection', () => {
     // The guard decides which methods are checked; the assertion itself is
     // method-agnostic. A cross-site read of a JSON endpoint is blocked by CORS
     // anyway, and requiring a token for reads would break plain navigation.
-    expect(() =>
+    await expect(
       guardRequest(read, { bucket: 'tania.read', subject: `read-${Math.random()}` }),
-    ).not.toThrow();
+    ).resolves.toBeDefined();
   });
 
-  it('still checks a write through the guard', () => {
-    expect(() =>
+  it('still checks a write through the guard', async () => {
+    // The guard became async when the limiter did, so the refusal arrives as a
+    // rejection rather than a synchronous throw. Routes await it inside their
+    // existing try/catch, so the handling is unchanged.
+    await expect(
       guardRequest(post({ origin: 'https://evil.test' }), {
         bucket: 'tania.read',
         subject: `write-${Math.random()}`,
       }),
-    ).toThrow(/lintas situs/);
+    ).rejects.toThrow(/lintas situs/);
   });
 });
 

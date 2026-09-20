@@ -27,7 +27,7 @@ export async function POST(request: Request): Promise<Response> {
 
     // Origin check then rate limit. Missed in the first sweep: this is a
     // mutating endpoint and was reaching the Brain unguarded.
-    guardRequest(request, { bucket: 'tania.chat', subject: actor.id });
+    await guardRequest(request, { bucket: 'tania.chat', subject: actor.id });
 
     const payload = await readJsonBody(request);
 

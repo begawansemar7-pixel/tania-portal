@@ -16,9 +16,14 @@ export { TOOL_REGISTRY, findTool } from '@/lib/tania/tools/registry';
 export type { ToolDefinition } from '@/lib/tania/tools/registry';
 export {
   InProcessRateLimiter,
+  limiterHealth,
   RATE_LIMITS,
   rateLimiter,
+  RedisRateLimiter,
+  ResilientRateLimiter,
+  type LimiterState,
   type RateLimitDecision,
+  type RateLimiter,
   type RateLimitRule,
 } from './policies/rate-limit';
 export {

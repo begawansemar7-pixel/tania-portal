@@ -57,6 +57,17 @@ jobs:
           --health-timeout 5s
           --health-retries 20
 
+      # The rate limiter's Lua script is only really tested against a server:
+      # a fake reply agrees with whoever wrote it.
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
     steps:
       - uses: actions/checkout@v4
 
@@ -71,6 +82,12 @@ jobs:
       - run: npm run test:e2e
         env:
           E2E_DATABASE_URL: postgresql://tania:tania@localhost:5432/tania_e2e?schema=public
+
+      # Fails rather than skips when REDIS_URL is absent, so a green here means
+      # the script really ran on a real Redis.
+      - run: npm run test:redis
+        env:
+          REDIS_URL: redis://localhost:6379
 
   audit:
     name: Dependency audit

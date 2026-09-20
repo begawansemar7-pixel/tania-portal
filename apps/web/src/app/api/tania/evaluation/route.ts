@@ -25,7 +25,7 @@ export async function GET(request: Request): Promise<Response> {
     if (!actor) {
       throw ApiError.unauthorized('No authenticated actor for this request.');
     }
-    guardRequest(request, { bucket: 'tania.read', subject: actor.id });
+    await guardRequest(request, { bucket: 'tania.read', subject: actor.id });
 
     const tasks = await getTaskStore().list(actor, 200);
     const report = getEvaluator().evaluate({ tasks, events: await getGovernanceSink().all() });

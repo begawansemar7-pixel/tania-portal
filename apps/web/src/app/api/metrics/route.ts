@@ -1,5 +1,5 @@
 import { getEvaluator, getGovernanceSink, getPersistenceStatus } from '@/lib/tania/container';
-import { rateLimiter } from '@/lib/governance';
+import { limiterHealth } from '@/lib/governance';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +16,7 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(): Promise<Response> {
   const status = getPersistenceStatus();
+  const limiter = limiterHealth();
   const events = await getGovernanceSink().all();
   const report = getEvaluator().evaluate({ tasks: [], events });
 
@@ -34,7 +35,19 @@ export async function GET(): Promise<Response> {
     '',
     '# HELP tania_rate_limit_buckets Active rate-limit buckets in this process.',
     '# TYPE tania_rate_limit_buckets gauge',
-    `tania_rate_limit_buckets ${rateLimiter().size()}`,
+    `tania_rate_limit_buckets ${limiter.buckets}`,
+    '',
+    '# HELP tania_rate_limit_distributed Whether limits hold across instances.',
+    '# TYPE tania_rate_limit_distributed gauge',
+    `tania_rate_limit_distributed ${limiter.distributed ? 1 : 0}`,
+    '',
+    '# HELP tania_rate_limit_degraded Whether the limiter fell back to per-instance counting.',
+    '# TYPE tania_rate_limit_degraded gauge',
+    `tania_rate_limit_degraded ${limiter.degraded ? 1 : 0}`,
+    '',
+    '# HELP tania_rate_limit_backend_failures_total Rate-limit backend failures since start.',
+    '# TYPE tania_rate_limit_backend_failures_total counter',
+    `tania_rate_limit_backend_failures_total ${limiter.failures}`,
     '',
     '# HELP tania_runtime_capabilities_live JARVIS capabilities served by a real runtime.',
     '# TYPE tania_runtime_capabilities_live gauge',

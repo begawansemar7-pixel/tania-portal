@@ -34,7 +34,7 @@ export async function POST(request: Request): Promise<Response> {
 
     // Origin check then rate limit: a forged request must not be able
     // to exhaust a real user's budget.
-    guardRequest(request, { bucket: 'tania.tasks', subject: actor.id });
+    await guardRequest(request, { bucket: 'tania.tasks', subject: actor.id });
 
     const payload = await readJsonBody(request);
 
@@ -107,7 +107,7 @@ export async function GET(request: Request): Promise<Response> {
 
     // Origin check then rate limit: a forged request must not be able
     // to exhaust a real user's budget.
-    guardRequest(request, { bucket: 'tania.tasks', subject: actor.id });
+    await guardRequest(request, { bucket: 'tania.tasks', subject: actor.id });
 
     const raw = new URL(request.url).searchParams.get('limit');
     const parsed = raw === null ? DEFAULT_LIST_LIMIT : Number.parseInt(raw, 10);

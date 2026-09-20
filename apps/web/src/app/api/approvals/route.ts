@@ -24,7 +24,7 @@ export async function GET(request: Request): Promise<Response> {
 
     // Origin check then rate limit: a forged request must not be able
     // to exhaust a real user's budget.
-    guardRequest(request, { bucket: 'tania.approvals', subject: actor.id });
+    await guardRequest(request, { bucket: 'tania.approvals', subject: actor.id });
 
     const approvals = await getApprovalStore().list(actor);
     return ok(approvals, requestId, { page: { limit: 50, returned: approvals.length } });
@@ -45,7 +45,7 @@ export async function POST(request: Request): Promise<Response> {
 
     // Origin check then rate limit: a forged request must not be able
     // to exhaust a real user's budget.
-    guardRequest(request, { bucket: 'tania.approvals', subject: actor.id });
+    await guardRequest(request, { bucket: 'tania.approvals', subject: actor.id });
     if (!actor.scopes.includes('workflow:approve')) {
       throw new ApiError('FORBIDDEN', 'Actor lacks the workflow:approve scope.');
     }

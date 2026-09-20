@@ -5,7 +5,7 @@
 | Tanggal | 20 September 2026 |
 | Lingkup | 17 lapisan, model ancaman 8 kategori, seluruh gerbang otomatis |
 | Metode | Telaah kode, pembacaan kontrak, probe terhadap artefak produksi yang berjalan, penanaman pelanggaran untuk membuktikan penjaga benar-benar menyala |
-| **Verdict** | **BELUM SIAP PRODUKSI** — 4 pemblokir kritis terbuka |
+| **Verdict** | **BELUM SIAP PRODUKSI** — 3 pemblokir kritis terbuka (B2 ditutup 20 Sep 2026) |
 | Dokumen terkait | [`production-readiness.md`](production-readiness.md) · [`security-review.md`](security-review.md) · [`operations-runbook.md`](operations-runbook.md) |
 
 ---
@@ -32,7 +32,7 @@ Legenda status — semuanya faktual, bukan penilaian:
 | 1 | **Frontend** | `TERUJI` | 658 tes portal; build produksi; CSP ber-nonce tanpa pelanggaran | Aset avatar masih fikstur |
 | 2 | **Backend** | `TERUJI` | 30 tes e2e terhadap PostgreSQL sungguhan; `ValidationPipe` di setiap batas | — |
 | 3 | **Database** | `TERUJI` | Migrasi Prisma; 15 indeks termasuk komposit ber-scope aktor; kueri ber-`take` dan diklem `bounded(limit, 200)` | **Tanpa kebijakan backup, restore, atau retensi** (§6) |
-| 4 | **Redis** | `TIDAK ADA` | Disediakan di `docker-compose.yml`; **nol baris kode memakainya** | Rate limit tetap per-instans (B2) |
+| 4 | **Redis** | `TERUJI` | Pembatas laju terdistribusi lewat skrip Lua atomik; 15 tes unit + 6 tes terhadap Redis sungguhan di CI | Deployment masih harus **menyetel `REDIS_URL`**; `/api/ready` mengumumkan bila belum |
 | 5 | **Authentication** | `TERUJI` | OIDC authorization-code + PKCE; cookie sesi HS256; 5 pemeriksaan smoke: anonim/palsu/disunting → 401, sah → 200 | Mode `mock` ditolak di produksi lewat `RefusingIdentityProvider` + `/api/ready` |
 | 6 | **RBAC** | `TERUJI` | 7 peran → scope; `applyRoles` **mengganti** scope (demosi benar-benar berlaku); pemisahan tugas terdeteksi | Peran dipetakan dari klaim grup; pemetaan belum diuji terhadap Entra ID nyata |
 | 7 | **RAG** | `SEBAGIAN` | Filter izin diterapkan **saat pemindaian**, bukan sesudahnya; diuji termasuk kebocoran lewat judul; sitasi bermarka | Indeks in-memory; korpus 11 dokumen fikstur; **tanpa jalur ingestion nyata** |
@@ -84,19 +84,48 @@ Sistem yang memegang data perusahaan, mengeksekusi aksi, dan menyimpan jejak
 audit yang dimaksudkan bernilai bukti tidak boleh go-live hanya berbekal telaah
 oleh pihak yang menulis kodenya.
 
-### B2 — Rate limiting tidak berlaku pada topologi yang dituju
+### ~~B2 — Rate limiting tidak berlaku pada topologi yang dituju~~ — **DITUTUP 20 September 2026**
 
-Pembatas laju menyimpan state di memori proses. `docker-compose.yml` menjalankan
-satu replika, sehingga kontrolnya tampak bekerja — dan memang terbukti bekerja
-(permintaan ke-21 → 429 dengan `Retry-After`).
+**Dulu.** Pembatas laju menyimpan state di memori proses. Pada satu replika ia
+bekerja dan terbukti bekerja; pada dua replika setiap instans membawa
+penghitungnya sendiri dan batas efektifnya berlipat **tanpa satu pun sinyal**.
 
-Yang membuatnya pemblokir bukan cacat implementasinya, melainkan **diam-diamnya
-saat gagal**: begitu deployment naik ke dua replika, setiap instans membawa
-penghitungnya sendiri dan batas efektifnya berlipat, tanpa satu pun sinyal yang
-memberi tahu. Kontrol yang gagal tanpa bersuara lebih buruk daripada kontrol yang
-tidak ada, sebab yang kedua setidaknya jujur.
+**Sekarang.** Penghitungan pindah ke Redis lewat skrip Lua yang berjalan
+atomik di server. Atomisitas bukan kerapian: `INCR` lalu `EXPIRE` sebagai dua
+perintah meninggalkan jendela di mana kunci ada tanpa TTL — bila proses mati di
+sana, kunci itu **tidak pernah kedaluwarsa** dan subjeknya terbatasi selamanya.
+Pengguna yang terkunci permanen oleh gangguan infrastruktur adalah kegagalan
+yang lebih buruk daripada yang dicegah pembatas laju.
 
-Redis sudah disediakan di compose dan **tidak dipakai satu baris kode pun**.
+**Yang diputuskan secara sadar: apa yang terjadi saat Redis mati.** Tiga pilihan,
+dan dua di antaranya buruk. *Fail open* menghapus kontrolnya justru ketika sistem
+sudah sakit — penyerang yang dapat mengganggu Redis mendapat laju tak terbatas.
+*Fail closed* mengubah gangguan sesaat menjadi pemadaman total; pembatas laju
+adalah jaring pengaman, dan jaring pengaman tidak boleh mampu merobohkan
+gedungnya. Yang dipilih: **merosot** ke penghitung per-instans — batasnya menjadi
+`limit × replika`, lebih lemah, **terbatas**, dan masih berupa batas.
+
+Tetapi merosot hanya boleh dengan satu syarat, dan syarat itulah inti
+perbaikannya. Cacat aslinya bukan bahwa penghitung per-instans lemah — melainkan
+bahwa ia berhenti berlaku **tanpa mengatakannya**. Maka kemerosotan di sini
+bersuara: dicatat di log pada setiap transisi (transisinya, bukan tiap
+permintaan, agar peristiwanya tidak terkubur kebisingannya sendiri), dihitung,
+diumumkan di `/api/metrics` dan `/api/ready`, serta dibawa pada setiap keputusan
+sebagai `enforcedBy`.
+
+**Yang tersisa dan pindah ke daftar periksa.** Kodenya tidak dapat memaksa
+sebuah deployment menyetel `REDIS_URL`. Bila tidak disetel, portal memakai
+penghitung per-instans — benar untuk satu mesin, salah untuk lebih. Bedanya
+dengan keadaan sebelumnya: kini `/api/ready` menyatakannya lewat
+`rate_limit.distributed: false`, sehingga kesalahan konfigurasi itu terlihat
+alih-alih ditemukan saat insiden. Karena itu ini turun dari pemblokir menjadi
+butir daftar periksa nomor 1.
+
+**Verifikasi.** 15 tes unit, termasuk dua replika yang berbagi satu anggaran,
+kemerosotan yang tetap menegakkan batas, dan cooldown yang mencegah setiap
+permintaan membayar timeout koneksi. Ditambah 6 tes terhadap **Redis sungguhan**
+di CI — yang **gagal, bukan dilewati**, bila `REDIS_URL` tidak ada, sebab suite
+yang diam-diam melewatkan prasyaratnya membuat papan hijau tanpa arti.
 
 ### B3 — Rahasia dari environment, tanpa rotasi
 
@@ -147,7 +176,7 @@ Berurutan. Nomor 1–4 menutup pemblokir.
 
 | # | Perbaikan | Menutup | Catatan pelaksanaan |
 |---|---|---|---|
-| 1 | Adapter rate limit di Redis | B2 | Redis sudah ada di compose; yang kurang hanya adapternya. Antarmukanya sudah terpisah |
+| ~~1~~ | ~~Adapter rate limit di Redis~~ | ~~B2~~ | **Selesai 20 Sep 2026.** Tersisa: setel `REDIS_URL` saat deploy dan verifikasi lintas dua replika (daftar periksa #1) |
 | 2 | Rahasia dari Azure Key Vault (atau sepadan) dengan rotasi | B3 | Prioritaskan `TANIA_SESSION_SECRET`; rencanakan rotasi yang tidak memutus sesi aktif |
 | 3 | Error monitoring + tracing terdistribusi | B4 | `correlationId` sudah menembus tiga layanan — sambungkan ke Sentry/OTel, jangan buat skema baru |
 | 4 | Uji penetrasi oleh pihak ketiga | B1 | Lakukan **setelah** 1–3, agar yang diuji adalah sistem yang akan dikirim |
@@ -171,7 +200,7 @@ dinyatakan demikian alih-alih disamarkan sebagai pengukuran.
 | P2 | **Retensi audit bertabrakan dengan rantai hash** | Tabel audit tumbuh tanpa batas; tidak ada retensi. Memangkas baris lama **memutus rantai**, sehingga retensi bukan sekadar `DELETE` | Tumbuh terus sampai seseorang harus memangkasnya dalam keadaan terdesak — persis saat kesalahan paling mahal |
 | P3 | **Indeks pengetahuan in-memory** | Dibangun ulang deterministik dari korpus saat startup | Dengan 11 dokumen fikstur tidak berarti apa-apa. Dengan korpus perusahaan nyata, ini menjadi biaya startup dan batas memori per instans |
 | P4 | **Workspace runtime adalah `Map` in-memory** | Tanpa batas ukuran, tanpa eviction, hilang saat restart | Beban tulis berkelanjutan menumbuhkan heap tanpa plafon |
-| P5 | **State pembatas laju tumbuh per-instans** | `sweepIfDue` sudah ditambahkan dan dipanggil dari `check()` | Teratasi untuk satu instans; tidak relevan lagi setelah pindah ke Redis (B2) |
+| P5 | **State pembatas laju tumbuh per-instans** | `sweepIfDue` dipanggil dari `check()`; dengan Redis, kedaluwarsa ditangani server | Teratasi. Jalur fallback masih memakai peta in-memory, tetapi hanya selama Redis tidak terjangkau |
 | P6 | **SSE bervolume tinggi per giliran** | Smoke mencatat **162 peristiwa** untuk satu percakapan | Per koneksi tidak masalah; pada ribuan sesi bersamaan, ini beban memori dan socket yang belum pernah diukur |
 | P7 | **Avatar 3D di perangkat kelas bawah** | Fallback dan `prefers-reduced-motion` dihormati; pembuangan WebGL dijaga tes | Belum pernah diukur pada perangkat nyata |
 
@@ -292,7 +321,7 @@ Tidak ada butir wajib yang boleh dilewati. Nomor 1–4 adalah pemblokir.
 
 ### Sebelum go-live — wajib
 
-- [ ] **1.** Adapter rate limit Redis terpasang; diverifikasi menahan batas **lintas dua replika**, bukan satu
+- [ ] **1.** `REDIS_URL` disetel; `/api/ready` melaporkan `rate_limit.distributed: true`; batas diverifikasi menahan **lintas dua replika**, bukan satu
 - [ ] **2.** Seluruh rahasia dari pengelola rahasia; rotasi teruji; `TANIA_SESSION_SECRET` didahulukan
 - [ ] **3.** Error monitoring dan tracing tersambung ke `correlationId` yang sudah ada
 - [ ] **4.** Uji penetrasi pihak ketiga selesai, temuannya ditutup atau diterima secara tertulis
@@ -325,9 +354,10 @@ Tidak ada butir wajib yang boleh dilewati. Nomor 1–4 adalah pemblokir.
 
 **BELUM SIAP PRODUKSI.**
 
-Empat pemblokir kritis terbuka: tanpa uji penetrasi (B1), rate limit yang tidak
-berlaku pada topologi yang dituju (B2), rahasia tanpa pengelola dan rotasi (B3),
-dan buta terhadap kegagalan produksi (B4).
+Tiga pemblokir kritis terbuka: tanpa uji penetrasi (B1), rahasia tanpa pengelola
+dan rotasi (B3), dan buta terhadap kegagalan produksi (B4). B2 ditutup pada 20
+September 2026; sisanya berupa butir daftar periksa deployment, bukan pekerjaan
+kode.
 
 Yang perlu dinyatakan dengan adil: tidak satu pun dari keempatnya adalah cacat
 pada logika sistem. Bidang tata kelolanya berdiri utuh dan terbukti — persetujuan

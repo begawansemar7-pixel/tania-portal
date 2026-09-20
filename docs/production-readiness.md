@@ -48,7 +48,7 @@ Legenda: **✅ siap** · **⚠️ sebagian** · **❌ belum**
 | Sesi aman | ✅ | Cookie HS256 httpOnly/SameSite=Lax/Secure, TTL terbatas, payload disunting ditolak |
 | Proteksi CSRF | ✅ | Pemeriksaan origin pada metode yang mengubah state; terverifikasi 403/200 |
 | Validasi input | ✅ | Di ketiga batas API — portal (batas ukuran badan), `apps/api`, dan `apps/runtime` (`ValidationPipe` dengan `whitelist` + `forbidNonWhitelisted`, dideklarasikan di modul sehingga tes memakai aturan yang sama dengan produksi) |
-| Rate limiting | ⚠️ | Bekerja per instans; belum terdistribusi |
+| Rate limiting | ✅ | Terdistribusi lewat Redis (skrip Lua atomik); merosot ke per-instans **dengan suara** bila Redis tidak terjangkau. Deployment harus menyetel `REDIS_URL` |
 | Manajemen rahasia | ⚠️ | Tersamar di log dan UI; sumbernya masih environment |
 | Security headers | ✅ | CSP ber-nonce tanpa pelanggaran di produksi, HSTS, dan lainnya |
 
@@ -90,7 +90,7 @@ Jejak tata kelola hanya tampil bagi pemegang `audit:read`.
 | Docker | ✅ | Multi-stage; dev dependency dipangkas; non-root; healthcheck |
 | Konfigurasi environment | ✅ | Skema tervalidasi; gagal cepat saat salah |
 | Migrasi database | ✅ | Prisma migrate; `db:deploy` untuk rilis |
-| Redis | ❌ | Disediakan di compose, **belum dipakai kode mana pun** (rate limit masih per-instans) |
+| Redis | ✅ | Menopang pembatas laju terdistribusi; 6 tes terhadap server sungguhan di CI |
 | Observabilitas | ⚠️ | Metrik Prometheus dan log terstruktur; belum ada tracing |
 | Log terstruktur | ✅ | JSON dengan correlation id di seluruh lapisan |
 | Metrik | ✅ | `/api/metrics`, sengaja sempit |
@@ -134,7 +134,7 @@ Disebut terpisah karena mudah tertutup oleh kedalaman lapisan di atasnya.
 
 1. ~~Adapter OIDC + sesi cookie di portal.~~ **Selesai.**
 2. ~~Sink tata kelola dan task store di PostgreSQL.~~ **Selesai.**
-3. **Rate limit di Redis.** Redis sudah ada; yang kurang adalah adapternya.
+3. ~~**Rate limit di Redis.**~~ **Selesai 20 September 2026.** Tersisa menyetel `REDIS_URL` saat deploy.
 4. **Rahasia dari pengelola rahasia, dengan rotasi.**
 5. **Ingress: TLS, HSTS, blokir `/api/metrics`.**
 6. **Error monitoring dan tracing.**

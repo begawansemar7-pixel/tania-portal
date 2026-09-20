@@ -26,7 +26,7 @@ export async function POST(request: Request): Promise<Response> {
 
     // Origin check then rate limit: a forged request must not be able
     // to exhaust a real user's budget.
-    guardRequest(request, { bucket: 'tania.read', subject: actor.id });
+    await guardRequest(request, { bucket: 'tania.read', subject: actor.id });
 
     const payload = await readJsonBody(request);
 

@@ -17,7 +17,7 @@ export async function POST(request: Request): Promise<Response> {
   const requestId = correlationFrom(request.headers);
 
   try {
-    guardRequest(request, { bucket: 'tania.read', subject: 'logout' });
+    await guardRequest(request, { bucket: 'tania.read', subject: 'logout' });
 
     const response = ok({ signedOut: true }, requestId);
     const headers = new Headers(response.headers);

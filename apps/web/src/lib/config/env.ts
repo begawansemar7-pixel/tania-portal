@@ -24,6 +24,17 @@ export const ENV_SCHEMA = {
   SERVICE_VERSION: str({ default: '0.1.0' }),
   LOG_LEVEL: oneOf(['debug', 'info', 'warn', 'error'] as const, { default: 'info' }),
 
+  /**
+   * Redis, used to hold rate limits across instances.
+   *
+   * Absent means the per-instance limiter, which is correct for a development
+   * machine and **not** correct for more than one replica: each would keep its
+   * own counter and the effective limit would multiply. `/api/ready` reports
+   * that state rather than leaving it to be discovered.
+   */
+  REDIS_URL: str(),
+  TANIA_REDIS_TIMEOUT_MS: int({ default: 1000, min: 50, max: 10_000 }),
+
   TANIA_API_BASE_URL: str(),
   TANIA_SERVICE_TOKEN: str({ secret: true }),
   TANIA_API_TIMEOUT_MS: int({ default: 8000, min: 100, max: 120_000 }),
@@ -156,6 +167,10 @@ export interface TaniaConfig {
     allowedOrigins: string[];
     cspReportOnly: boolean;
   };
+  redis: {
+    url?: string;
+    timeoutMs: number;
+  };
 }
 
 export function loadConfig(source: EnvSource = process.env): TaniaConfig {
@@ -210,6 +225,10 @@ export function loadConfig(source: EnvSource = process.env): TaniaConfig {
         .map((origin) => origin.trim())
         .filter((origin) => origin.length > 0),
       cspReportOnly: env.TANIA_CSP_REPORT_ONLY,
+    },
+    redis: {
+      ...(env.REDIS_URL === undefined ? {} : { url: env.REDIS_URL }),
+      timeoutMs: env.TANIA_REDIS_TIMEOUT_MS,
     },
   };
 }

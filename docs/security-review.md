@@ -85,13 +85,22 @@ in-process dapat disalahartikan sebagai persistensi.
 > jejak tata kelola: ia dibangun ulang secara deterministik dari korpus, jadi
 > kehilangannya saat restart adalah biaya startup, bukan bukti yang hilang.
 
-### TINGGI-1 — Rate limiting tidak terdistribusi
+### DIPERBAIKI-10 — Rate limiting tidak terdistribusi *(sebelumnya TINGGI-1)*
 
 **Bukti.** `InProcessRateLimiter.distributed === false`. Terverifikasi bekerja per instans: permintaan ke-21 dalam satu menit menerima `429` dengan `Retry-After: 22`.
 
 **Akibat.** Dengan *n* instans, batas efektif menjadi *n* kali lipat. Cukup sebagai jaring pengaman terhadap klien yang lepas kendali, **tidak cukup** terhadap penyerang.
 
 **Perlu.** Penghitung di Redis. Redis sudah disediakan di `docker-compose.yml` tetapi **belum dipakai kode mana pun** — itu disengaja dan dicatat, bukan kelalaian yang tersembunyi.
+
+
+**Diperbaiki** 20 September 2026. Penghitungan pindah ke Redis lewat skrip Lua atomik; `INCR` lalu `EXPIRE` sebagai dua perintah meninggalkan jendela di mana kunci ada tanpa TTL, dan proses yang mati di sana mengunci subjeknya selamanya.
+
+Saat Redis tidak terjangkau, limiter **merosot** ke penghitung per-instans alih-alih fail-open (yang memberi penyerang laju tak terbatas justru saat sistem sakit) atau fail-closed (yang mengubah gangguan sesaat menjadi pemadaman). Syaratnya satu, dan itulah inti perbaikannya: kemerosotan harus bersuara. Cacat aslinya bukan kelemahan penghitung per-instans, melainkan bahwa ia berhenti berlaku tanpa mengatakannya. Kini setiap transisi dicatat, dihitung, diumumkan di `/api/metrics` dan `/api/ready`, dan dibawa tiap keputusan sebagai `enforcedBy`.
+
+**Verifikasi.** 15 tes unit plus 6 tes terhadap Redis sungguhan di CI, yang **gagal alih-alih dilewati** tanpa `REDIS_URL`.
+
+**Tersisa.** Deployment harus menyetel `REDIS_URL`; bila tidak, `/api/ready` melaporkan `rate_limit.distributed: false`.
 
 ### SEDANG-1 — `/api/metrics` tanpa autentikasi
 

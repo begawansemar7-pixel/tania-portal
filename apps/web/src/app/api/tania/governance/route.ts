@@ -20,7 +20,7 @@ export async function GET(request: Request): Promise<Response> {
     if (!actor) {
       throw ApiError.unauthorized('No authenticated actor for this request.');
     }
-    guardRequest(request, { bucket: 'tania.read', subject: actor.id });
+    await guardRequest(request, { bucket: 'tania.read', subject: actor.id });
 
     if (!actor.scopes.includes('audit:read')) {
       throw new ApiError('FORBIDDEN', 'Actor lacks the audit:read scope.');

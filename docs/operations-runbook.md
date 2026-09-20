@@ -60,6 +60,7 @@ Sumber kebenaran adalah skema di `apps/web/src/lib/config/env.ts` dan `apps/api/
 | Variabel | Efek |
 |---|---|
 | `TANIA_APPROVAL_THRESHOLD` | Risiko mulai kapan sebuah aksi menunggu manusia. Default `HIGH` |
+| `REDIS_URL` | **Wajib di atas satu replika.** Tanpanya batas laju hanya berlaku di dalam satu instans, dan batas efektifnya menjadi `limit × replika` |
 | `TANIA_RUNTIME_ADAPTER` + `JARVIS_BASE_URL` | `jarvis` mengarahkan eksekusi ke runtime nyata |
 | `JARVIS_CAPABILITIES` | Kapabilitas mana yang benar-benar dilayani runtime; sisanya tetap simulasi |
 | `NEXT_PUBLIC_TANIA_AVATAR_URL` | Tanpa ini, avatar 3D tidak dirender sama sekali |
@@ -183,10 +184,44 @@ npm run verify       # lint, typecheck, unit + integrasi, production build
 npm run test:e2e     # e2e backend terhadap PostgreSQL sungguhan
 npm run test:interop # adapter TANIA terhadap proses runtime yang benar-benar berjalan
 npm run test:smoke   # 18 pemeriksaan terhadap artefak produksi yang sudah dibangun
+npm run test:redis   # pembatas laju terhadap Redis sungguhan (butuh REDIS_URL)
 npm run audit        # advisory produksi, ditimbang terhadap pengecualian bertanggal
 ```
 
 CI menjalankan seluruhnya ditambah build image pada setiap pull request.
+
+### Ketika pembatas laju merosot
+
+Gejala di log: `rate_limit.degraded`, satu baris per transisi (bukan per
+permintaan — sebuah pemadaman akan menulis satu baris per permintaan dan
+mengubur peristiwa yang penting di bawah kebisingannya sendiri).
+
+Di metrik:
+
+```
+tania_rate_limit_distributed 1   # Redis dikonfigurasi
+tania_rate_limit_degraded 1      # tetapi tidak terjangkau sekarang
+tania_rate_limit_backend_failures_total N
+```
+
+Artinya: **portal tetap melayani, dan batas masih ditegakkan**, tetapi hanya di
+dalam tiap instans. Batas efektif sementara menjadi `limit × replika`. Ini
+disengaja — fail-open akan memberi penyerang laju tak terbatas justru saat
+sistem sedang sakit, dan fail-closed akan mengubah gangguan Redis sesaat menjadi
+pemadaman total.
+
+1. Periksa kesehatan Redis. Limiter mencoba lagi setiap 5 detik dan pulih
+   sendiri; `rate_limit.recovered` akan muncul di log.
+2. Selama merosot, **jangan menaikkan jumlah replika** — itu melonggarkan batas
+   lebih jauh.
+3. Bila `tania_rate_limit_distributed 0` padahal produksi berjalan di lebih dari
+   satu replika, itu bukan kemerosotan melainkan **kesalahan konfigurasi**:
+   `REDIS_URL` tidak disetel. `/api/ready` menyatakannya di `advisories`.
+
+Mengapa ini tidak menggagalkan readiness: menolak lalu lintas pada tiap instans
+yang pembatas lajunya merosot akan menarik **semua** instans dari rotasi dan
+menyebabkan pemadaman yang justru hendak dicegah. Karena itu ia dilaporkan di
+`advisories`, terpisah dari `checks` yang menentukan kesiapan.
 
 ### Ketika `npm run audit` merah
 

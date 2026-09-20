@@ -34,11 +34,14 @@ export interface GuardResult {
  * 2. **Rate limit.** Applied after origin so an attacker cannot exhaust a
  *    legitimate user's budget with forged requests.
  */
-export function guardRequest(request: Request, options: GuardOptions): GuardResult {
+export async function guardRequest(
+  request: Request,
+  options: GuardOptions,
+): Promise<GuardResult> {
   if (MUTATING.has(request.method)) assertSameOrigin(request);
 
   const rule = RATE_LIMITS[options.bucket] ?? RATE_LIMITS['tania.read'];
-  const decision = rateLimiter().check(`${options.bucket}:${options.subject}`, rule!);
+  const decision = await rateLimiter().check(`${options.bucket}:${options.subject}`, rule!);
 
   if (!decision.allowed) {
     // `retryAfter` travels on the error so the response can carry the header:

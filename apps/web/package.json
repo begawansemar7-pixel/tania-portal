@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "test:coverage": "vitest run --coverage",
     "test:browser": "playwright test",
-    "test:interop": "vitest run --config ./vitest.config.interop.mts"
+    "test:interop": "vitest run --config ./vitest.config.interop.mts",
+    "test:redis": "vitest run --config ./vitest.config.redis.mts"
   },
   "dependencies": {
     "@pixiv/three-vrm": "^3.5.5",
@@ -21,6 +22,7 @@
     "@tania/config": "*",
     "@tania/core": "*",
     "@tania/types": "*",
+    "ioredis": "^6.0.0",
     "jose": "^6.2.12",
     "lucide-react": "^1.47.0",
     "next": "16.3.5",

@@ -1,5 +1,6 @@
 import { correlationFrom } from '@tania/config';
 import { getPersistenceStatus } from '@/lib/tania/container';
+import { limiterHealth } from '@/lib/governance';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,6 +15,13 @@ export const dynamic = 'force-dynamic';
  * A missing backend is reported as **not ready** rather than degraded: without
  * it, approvals fall back to memory, and an approval that cannot be recorded
  * durably must not gate a production action.
+ *
+ * The response separates two kinds of finding, because conflating them causes
+ * outages. `checks` gate readiness. `advisories` are reported and do not: a
+ * per-instance rate limiter is a real misconfiguration above one replica, but
+ * failing readiness on it would pull **every** instance out of rotation and
+ * cause the outage it was meant to prevent. Worth seeing, not worth refusing
+ * traffic over.
  */
 export async function GET(request: Request): Promise<Response> {
   const requestId = correlationFrom(request.headers);
@@ -29,10 +37,29 @@ export async function GET(request: Request): Promise<Response> {
     { name: 'governance.durable', ok: status.governanceDurable, detail: 'audit sink' },
   ];
 
+  const limiter = limiterHealth();
+
+  const advisories = [
+    {
+      name: 'rate_limit.distributed',
+      ok: limiter.distributed,
+      detail: limiter.distributed
+        ? `enforced by ${limiter.id}`
+        : 'REDIS_URL unset — limits hold within this instance only',
+    },
+    {
+      name: 'rate_limit.healthy',
+      ok: !limiter.degraded,
+      detail: limiter.degraded
+        ? `rate-limit backend unreachable after ${limiter.failures} failures; counting per-instance`
+        : 'ok',
+    },
+  ];
+
   const ready = checks.every((check) => check.ok);
 
   return Response.json(
-    { data: { ready, checks }, requestId },
+    { data: { ready, checks, advisories }, requestId },
     { status: ready ? 200 : 503, headers: { 'cache-control': 'no-store' } },
   );
 }
